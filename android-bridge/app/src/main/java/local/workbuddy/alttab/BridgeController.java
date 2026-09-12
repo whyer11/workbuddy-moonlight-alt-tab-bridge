@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.IBinder;
+import android.os.Parcel;
 import android.util.Log;
 
 import rikka.shizuku.Shizuku;
@@ -12,9 +13,10 @@ import rikka.shizuku.Shizuku;
 public final class BridgeController {
     private static final String TAG = "WorkBuddyAltTab";
     private static final int PERMISSION_REQUEST = 5742;
-    private static boolean initialized;
-    private static boolean binding;
-    private static boolean connected;
+    private static volatile boolean initialized;
+    private static volatile boolean binding;
+    private static volatile boolean connected;
+    private static volatile IBinder bridgeBinder;
 
     private static final Shizuku.UserServiceArgs USER_SERVICE_ARGS =
             new Shizuku.UserServiceArgs(new ComponentName(
@@ -27,6 +29,7 @@ public final class BridgeController {
     private static final ServiceConnection CONNECTION = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
+            bridgeBinder = service;
             binding = false;
             connected = true;
             Log.i(TAG, "Shizuku user service connected");
@@ -34,6 +37,7 @@ public final class BridgeController {
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            bridgeBinder = null;
             binding = false;
             connected = false;
             Log.w(TAG, "Shizuku user service disconnected");
@@ -50,6 +54,7 @@ public final class BridgeController {
         initialized = true;
         Shizuku.addBinderReceivedListenerSticky(BridgeController::startIfAuthorized);
         Shizuku.addBinderDeadListener(() -> {
+            bridgeBinder = null;
             binding = false;
             connected = false;
         });
@@ -116,5 +121,28 @@ public final class BridgeController {
             return "状态：正在启动底层桥接";
         }
         return "状态：已授权，等待启动";
+    }
+
+    public static PadBridgeSnapshot padSnapshot() {
+        IBinder binder = bridgeBinder;
+        if (!connected || binder == null || !binder.isBinderAlive()) {
+            return PadBridgeSnapshot.offline();
+        }
+
+        Parcel data = Parcel.obtain();
+        Parcel reply = Parcel.obtain();
+        try {
+            if (!binder.transact(BridgeServiceProtocol.TRANSACTION_STATUS, data, reply, 0)) {
+                return PadBridgeSnapshot.offline();
+            }
+            reply.readException();
+            return BridgeServiceProtocol.readStatus(reply);
+        } catch (Throwable error) {
+            Log.w(TAG, "Cannot read native bridge status", error);
+            return PadBridgeSnapshot.offline();
+        } finally {
+            reply.recycle();
+            data.recycle();
+        }
     }
 }

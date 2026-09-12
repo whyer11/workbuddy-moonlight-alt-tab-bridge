@@ -123,10 +123,20 @@ public final class BridgeUserService extends Binder {
     @Override
     protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
             throws RemoteException {
+        if (code == BridgeServiceProtocol.TRANSACTION_STATUS) {
+            reply.writeNoException();
+            BridgeServiceProtocol.writeStatus(reply, isNativeBridgeAlive());
+            return true;
+        }
         if (code == SHIZUKU_USER_SERVICE_DESTROY) {
             destroy();
             return true;
         }
         return super.onTransact(code, data, reply, flags);
+    }
+
+    private boolean isNativeBridgeAlive() {
+        Process process = bridgeProcess;
+        return process != null && process.isAlive();
     }
 }
