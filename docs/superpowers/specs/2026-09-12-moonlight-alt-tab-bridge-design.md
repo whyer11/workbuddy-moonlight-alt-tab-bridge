@@ -1,76 +1,53 @@
 # Moonlight Alt+Tab 桥接工具设计
 
-## 目标
+## 目标与约束
 
-当小米平板上的 Moonlight 位于前台时，按下 `Alt+Tab` 必须切换串流 Windows 桌面中的前台程序，不能打开安卓多任务界面，也不能导致 Sunshine 串流暂停。离开 Moonlight 后，安卓原有的键盘行为保持不变。
+在小米 Pad（Android 17 / HyperOS 4）的 Moonlight 12.1 串流中，让实体键盘 `Alt+Tab` 触发 Windows 原生任务切换，不打开安卓多任务界面，也不让 Moonlight 丢失前台。不能 Root、不能替换 Moonlight、不能依赖辅助功能抢键。
 
-## 已验证的方案与最终选择
+## 真机调查结论
 
-我们实际验证了三种方案：
+- HyperOS 的“切换应用 Alt Tab”开关开启时，系统在应用收到 Tab 之前执行 `SHOW_RECENT_APPS`；关闭时系统仍可能在策略层吞掉 Tab，Moonlight 只能收到 Alt。
+- 具有 `FLAG_REQUEST_FILTER_KEY_EVENTS` 的辅助功能服务已成功绑定，但收不到这组被系统策略提前处理的按键，因此辅助功能路线不可行。
+- ADB shell 用户属于 `input`/`uhid` 相关组，能读取 `/dev/input/event9`（Xiaomi Keyboard）、对它执行 `EVIOCGRAB`，并能通过 `/dev/uinput` 创建设备。
+- Moonlight 12.1 只完整映射 F1 到 F12，不能使用最初尝试的 F13；`Alt+F12` 可完整传到 Windows。
 
-1. 澎湃 OS 工作台模式或安卓“屏幕固定”可以阻止 Moonlight 失去焦点，但 `Alt+Tab` 会被系统直接吞掉，Windows 收不到按键。
-2. LSPosed 模块可以修改小米系统的键盘策略，但需要 Root，并且强依赖系统版本；目前没有证据表明它兼容这台 Android 17 / 澎湃 OS 4 平板。
-3. 制作一个本地小型桥接工具：只拦截 Moonlight 中的 `Alt+Tab`，通过现有 Tailscale 连接向 Sunshine 主机发送经过认证的指令。这是最终选择，因为它不需要 Root、不替换 Moonlight、可自动生效，且权限和网络范围都可以严格限制。
+## 最终架构
 
-## 整体架构
+### Pad 端
 
-工具由两部分组成：
+`local.workbuddy.alttab` 通过 Shizuku 13.6.0 启动 daemon UserService。服务以 ADB shell 身份运行，部署 APK 内置的 ARM64 原生桥接程序并持续守护它。
 
-- `android-bridge`：独立安装的安卓应用，内部包含一个无障碍服务。它会记录当前前台应用。仅当 `com.limelight` 位于前台并收到“按住 Alt 的 Tab 键”时，才拦截 Tab 的按下和抬起事件，并在按下时发送一次 `ALT_TAB` 指令。其他应用和其他按键全部原样放行。
-- `windows-host`：在当前 Windows 用户会话中静默运行的小程序。它只监听电脑的 Tailscale IPv4 地址；验证指令后，通过 Windows `SendInput` 模拟一次完整的 `Alt+Tab`。
+原生桥接程序：
 
-现有官方 Moonlight、配对信息、Sunshine 配置、虚拟显示驱动和串流参数均不修改。
+1. 自动查找名称严格等于 `Xiaomi Keyboard` 的输入设备。
+2. 创建 `WorkBuddy Virtual Keyboard`，声明按键、扫描码与 LED 能力。
+3. 成功创建虚拟设备后才对物理键盘执行 `EVIOCGRAB`。
+4. 普通事件原样重放；左/右 Alt 按住期间，把 Tab 的按下、重复和抬起统一改成 F12。
+5. 收到终止信号或出现错误时释放独占并销毁虚拟设备。
 
-## 网络协议与安全边界
+该程序不读取网络、不存储按键、不输出普通按键日志。它会全局接管当前实体键盘，但只有 Moonlight 位于前台时映射后的 `Alt+F12` 才会被串流到电脑。HyperOS 的原生 Alt+Tab 开关保持关闭。
 
-- 传输方式：通过 Tailscale 使用 UDP；电脑地址为 `100.81.73.56`，平板地址为 `100.74.136.33`，端口为未占用的高位端口 `42837`。
-- 待签名的标准字符串：`v1|timestamp_ms|nonce_hex|ALT_TAB`。
-- 身份认证：使用安装时随机生成的 32 字节密钥，通过 HMAC-SHA-256 校验。
-- 防重放：时间戳超出 10 秒窗口的指令一律拒绝；同一随机数在该窗口内只能成功使用一次。
-- 网络限制：Windows 程序只绑定 `100.81.73.56`；防火墙只允许 `100.74.136.33` 向 UDP 42837 发送数据。
-- 密钥存放：Windows 端配置文件仅当前用户可读；同一密钥会编译进本机生成的 APK。日志和最终汇报都不会输出密钥。
-- 日志只记录时间和接受或拒绝原因，不记录其他按键内容，也不记录密钥。
+### Windows 端
 
-## 平板端行为
+无控制台 Win32 程序在当前用户登录时自动启动，并注册 `MOD_ALT | MOD_NOREPEAT + VK_F12` 全局热键。Moonlight 转发的 Alt 仍处于按下状态；热键触发后，程序用 `SendInput` 发送一次 Tab 按下/抬起，组合成 Windows 原生 `Alt+Tab`。
 
-无障碍服务申请键盘事件过滤和窗口状态事件权限，并保存最后一个前台应用的包名。只有包名严格等于 `com.limelight` 时才会处理快捷键。
+程序不开放端口，不依赖 Tailscale，也不修改 Sunshine。互斥体阻止重复实例；日志只记录程序状态和热键是否成功触发。
 
-检测到按住 Alt 的 Tab 键后：
+## 自动启动
 
-1. 拦截 Tab 按下事件，阻止澎湃 OS 打开安卓多任务界面。
-2. 异步发送一条经过认证的 `ALT_TAB` 数据报。
-3. 拦截对应的 Tab 抬起事件。
-4. Alt 键本身仍按原方式传递；Windows 端会执行完整、原子化的 `Alt+Tab`，因此结果不依赖 Moonlight 是否已经转发 Alt 状态。
+- Windows：HKCU Run 项启动隐藏程序。
+- Pad：HyperOS 已允许 Shizuku 与 WorkBuddy 自启动；Shizuku 获得 `WRITE_SECURE_SETTINGS`，以 ADB 模式启动。Android 13+ 连接受信任 WLAN 后，Shizuku 13.6.0 可自动恢复服务。
+- WorkBuddy：接收 `BOOT_COMPLETED`，等待 Shizuku Binder，权限已设为“始终允许”，随后绑定 daemon UserService；UserService 会重新部署 APK 内置原生程序并守护退出。
 
-如果 Tailscale 或电脑端程序不可用，该快捷键仍会被本地拦截，因此不会导致 Moonlight 暂停；其他按键不受影响。
+## 失败保护与回滚
 
-## 电脑端行为
+- 打不开物理设备、创建虚拟设备或独占失败时立即退出，不留半接管状态；UserService 每秒尝试恢复。
+- Windows 热键注册失败时退出并记录错误，不进行键盘注入。
+- 卸载 WorkBuddy 与 Shizuku、删除 HKCU Run 项并结束 Windows 常驻进程即可完整回滚；Moonlight、Sunshine、Tailscale 和串流显示设置不受影响。
 
-电脑端程序在用户登录时自动启动，并以无控制台窗口的方式运行。收到数据后依次验证来源 IP、数据格式、HMAC、时间戳和随机数。只接受完全匹配的 `ALT_TAB` 指令。验证成功后执行：Alt 按下、Tab 按下、Tab 抬起、Alt 抬起。
+## 验收标准
 
-程序和计划任务都在当前用户范围内运行；唯一的系统级改动是严格限定来源地址和端口的防火墙规则。
-
-## 故障处理与回滚
-
-- 格式错误、校验错误、超时、重复或未知指令全部忽略并记入日志。
-- 网络异常不会退出电脑端程序，程序会继续等待后续数据。
-- 关闭平板上的无障碍服务后，安卓原有快捷键行为会立即恢复。
-- 完整回滚会卸载桥接 APK，删除登录计划任务和防火墙规则；不会改动 Moonlight 或 Sunshine。
-
-## 验证要求
-
-自动化测试覆盖：
-
-- 平板端快捷键判定：只有 Moonlight 中的 Alt+Tab 会被拦截，并且每次只发送一条指令。
-- 电脑端消息验证：正确 HMAC 可以通过；错误 HMAC、过期时间戳、未知指令和重复随机数必须被拒绝。
-- Windows 按键注入通过可替换接口测试，验证逻辑测试期间不会真的切换窗口。
-
-最终真机测试必须在普通平板模式和实际的 3408×2272、144 FPS Moonlight 串流中完成：
-
-1. 记录安卓当前恢复的 Activity 和 Windows 前台窗口标题。
-2. 从平板键盘路径触发一次真实的 Alt+Tab 组合键。
-3. 确认安卓仍停留在 `com.limelight/.Game`。
-4. 确认 Sunshine 仍有一个活动会话，且没有断开记录。
-5. 确认 Windows 前台窗口标题发生变化。
-6. 确认离开 Moonlight 后，Alt+Tab 仍能正常打开安卓多任务界面。
-
+- `key_remap_test` 覆盖普通 Tab、左右 Alt、长按重复以及 Alt 先松开的序列。
+- Android APK 签名有效，清单中没有辅助功能、网络或存储权限。
+- Shizuku、UserService、原生桥接和 Windows 常驻程序均处于运行状态，且自动启动项存在。
+- 真机实体键盘操作后，Windows 出现任务切换界面；用户已在实际 Moonlight 会话中确认。

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WorkBuddy Alt+Tab</string>
+    <string name="bridge_title">Moonlight Alt+Tab 底层桥接</string>
+    <string name="bridge_description">通过 Shizuku 以系统 shell 权限启动底层键盘桥接，不使用辅助功能。物理 Alt+Tab 会转换为 Moonlight 12.1 支持的 Alt+F12，再由电脑端还原成 Windows Alt+Tab。</string>
+    <string name="start_bridge">授权并启动底层桥接</string>
+</resources>

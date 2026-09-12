@@ -1,12 +1,14 @@
-# Moonlight Alt+Tab 桥接工具实施计划
+# Moonlight Alt+Tab 桥接工具实施记录
+
+> 本文件最初描述的“辅助功能 + UDP”方案在真机验证中被否决。下面保留调查顺序，并以最终落地方案为准；当前设计详见同日设计文档。
 
 > **执行要求：** 每个实现步骤都遵循红—绿—重构；不得在自动测试失败时继续安装到真机。
 
 **目标：** 在小米平板的 Moonlight 串流界面内，让实体键盘 `Alt+Tab` 切换 Windows 前台窗口，同时保持 Moonlight 前台和 Sunshine 会话不断开。
 
-**架构：** Pad 端无障碍服务只在 `com.limelight` 前台时捕获 `Alt+Tab`，向电脑的 Tailscale 地址发送 HMAC 认证 UDP 指令；Windows 用户态常驻程序验证来源、时效、随机数和签名后，通过 `SendInput` 注入一次原子化 `Alt+Tab`。
+**最终架构：** Pad 端以 Shizuku shell 用户服务守护 evdev/uinput 桥接程序，将 `Alt+Tab` 映射为 Moonlight 12.1 可转发的 `Alt+F12`；Windows 用户态常驻程序用全局热键捕获 `Alt+F12` 并补发 Tab。
 
-**技术栈：** Android Java、Android AccessibilityService、UDP/HMAC-SHA256、C#/.NET Framework 4.8、Windows `SendInput`、PowerShell 安装脚本、Windows 任务计划程序和防火墙。
+**技术栈：** Android Java、Shizuku UserService、Linux evdev/uinput、C/NDK、Win32 `RegisterHotKey`/`SendInput`、HKCU Run。
 
 ---
 

@@ -1,0 +1,9 @@
+.tools/
+.gradle/
+android-sdk/
+**/build/
+**/obj/
+**/bin/
+local.properties
+config/config.json
+*.user
