@@ -13,7 +13,7 @@
 
 ## 当前安装状态
 
-- Pad 应用：WorkBuddy Alt+Tab 0.5.0（`local.workbuddy.alttab`）
+- Pad 应用：WorkBuddy Alt+Tab 0.5.1（`local.workbuddy.alttab`）
 - Shizuku：13.6.0，ADB 模式，已授予 WorkBuddy 永久权限
 - Pad 自启动：Shizuku 与 WorkBuddy Alt+Tab 均已允许
 - Windows 程序：`%LOCALAPPDATA%\WorkBuddyAltTab\WorkBuddyAltTabHost.exe`

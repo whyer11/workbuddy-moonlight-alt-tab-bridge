@@ -15,6 +15,9 @@
 
 static volatile sig_atomic_t stop_requested = 0;
 
+#define WB_BITS_PER_LONG (sizeof(unsigned long) * 8U)
+#define WB_LONG_COUNT(bit_count) (((bit_count) + WB_BITS_PER_LONG - 1U) / WB_BITS_PER_LONG)
+
 static void request_stop(int signal_number) {
     (void)signal_number;
     stop_requested = 1;
@@ -38,14 +41,28 @@ static int find_keyboard(char *path, size_t path_size) {
     return -1;
 }
 
-static int configure_virtual_keyboard(int fd) {
+static bool bit_is_set(const unsigned long *bits, unsigned int bit) {
+    return (bits[bit / WB_BITS_PER_LONG] & (1UL << (bit % WB_BITS_PER_LONG))) != 0;
+}
+
+static int configure_virtual_keyboard(int fd, int physical_fd) {
     if (ioctl(fd, UI_SET_EVBIT, EV_KEY) != 0) {
         return -1;
     }
+
+    unsigned long key_bits[WB_LONG_COUNT(KEY_MAX + 1U)];
+    memset(key_bits, 0, sizeof(key_bits));
+    if (ioctl(physical_fd, EVIOCGBIT(EV_KEY, sizeof(key_bits)), key_bits) < 0) {
+        return -1;
+    }
     for (int code = 0; code <= KEY_MAX; ++code) {
-        if (ioctl(fd, UI_SET_KEYBIT, code) != 0) {
+        if (bit_is_set(key_bits, (unsigned int)code)
+                && ioctl(fd, UI_SET_KEYBIT, code) != 0) {
             return -1;
         }
+    }
+    if (ioctl(fd, UI_SET_KEYBIT, KEY_F12) != 0) {
+        return -1;
     }
     if (ioctl(fd, UI_SET_EVBIT, EV_MSC) != 0
             || ioctl(fd, UI_SET_MSCBIT, MSC_SCAN) != 0
@@ -105,7 +122,7 @@ int main(int argc, char **argv) {
         close(physical_fd);
         return 3;
     }
-    if (configure_virtual_keyboard(virtual_fd) != 0) {
+    if (configure_virtual_keyboard(virtual_fd, physical_fd) != 0) {
         fprintf(stderr, "UINPUT_CREATE_FAILED errno=%d message=%s\n", errno, strerror(errno));
         close(virtual_fd);
         close(physical_fd);
