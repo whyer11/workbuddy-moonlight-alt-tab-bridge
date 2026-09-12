@@ -10,6 +10,10 @@ enum {
 };
 
 static wchar_t log_path[MAX_PATH];
+static HHOOK keyboard_hook;
+static bool win_key_down;
+
+#define WORKBUDDY_SYNTH_TAG ((ULONG_PTR)0x5742574BU)
 
 static void initialize_log_path(void) {
     wchar_t local_app_data[MAX_PATH];
@@ -55,6 +59,46 @@ static bool send_tab(void) {
     return SendInput(2, inputs, sizeof(INPUT)) == 2;
 }
 
+static bool send_win_key(bool down) {
+    INPUT input;
+    ZeroMemory(&input, sizeof(input));
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = VK_LWIN;
+    input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+    input.ki.dwExtraInfo = WORKBUDDY_SYNTH_TAG;
+    return SendInput(1, &input, sizeof(input)) == 1;
+}
+
+static LRESULT CALLBACK keyboard_hook_proc(int code, WPARAM message, LPARAM data) {
+    if (code == HC_ACTION) {
+        const KBDLLHOOKSTRUCT *event = (const KBDLLHOOKSTRUCT *)data;
+        if (event->vkCode == VK_SCROLL && event->dwExtraInfo != WORKBUDDY_SYNTH_TAG) {
+            bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+            bool up = message == WM_KEYUP || message == WM_SYSKEYUP;
+
+            if (down) {
+                if (!win_key_down && send_win_key(true)) {
+                    win_key_down = true;
+                }
+                return 1;
+            }
+            if (up) {
+                if (win_key_down && send_win_key(false)) {
+                    win_key_down = false;
+                }
+                return 1;
+            }
+        }
+    }
+    return CallNextHookEx(keyboard_hook, code, message, data);
+}
+
+static void release_win_key(void) {
+    if (win_key_down && send_win_key(false)) {
+        win_key_down = false;
+    }
+}
+
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
                     PWSTR command_line, int show_command) {
     (void)instance;
@@ -78,14 +122,25 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
         return 2;
     }
 
+    keyboard_hook = SetWindowsHookExW(
+            WH_KEYBOARD_LL, keyboard_hook_proc, instance, 0);
+    if (keyboard_hook == NULL) {
+        DWORD error = GetLastError();
+        write_log(L"HOOK_FAILED error=%lu", error);
+        UnregisterHotKey(NULL, HOTKEY_ALT_F12);
+        CloseHandle(mutex);
+        return 5;
+    }
+
     if (probe_only) {
-        write_log(L"PROBE_OK hotkey=ALT+F12");
+        write_log(L"PROBE_OK hotkey=ALT+F12 sentinel=SCROLLLOCK action=LWIN");
+        UnhookWindowsHookEx(keyboard_hook);
         UnregisterHotKey(NULL, HOTKEY_ALT_F12);
         CloseHandle(mutex);
         return 0;
     }
 
-    write_log(L"HOST_READY hotkey=ALT+F12 action=ALT+TAB");
+    write_log(L"HOST_READY hotkey=ALT+F12 action=ALT+TAB sentinel=SCROLLLOCK action=LWIN");
     MSG message;
     int result;
     while ((result = GetMessageW(&message, NULL, 0, 0)) > 0) {
@@ -95,6 +150,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
         }
     }
 
+    release_win_key();
+    UnhookWindowsHookEx(keyboard_hook);
     UnregisterHotKey(NULL, HOTKEY_ALT_F12);
     CloseHandle(mutex);
     write_log(L"HOST_STOPPED result=%d", result);

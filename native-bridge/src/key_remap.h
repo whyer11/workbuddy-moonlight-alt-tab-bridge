@@ -7,7 +7,9 @@
 enum {
     WB_KEY_TAB = 15,
     WB_KEY_LEFTALT = 56,
+    WB_KEY_SCROLLLOCK = 70,
     WB_KEY_RIGHTALT = 100,
+    WB_KEY_LEFTMETA = 125,
     WB_KEY_F12 = 88,
 };
 

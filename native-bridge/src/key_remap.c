@@ -1,6 +1,9 @@
 #include "key_remap.h"
 
 uint16_t key_remap_apply(struct key_remap_state *state, uint16_t code, int32_t value) {
+    if (code == WB_KEY_LEFTMETA) {
+        return WB_KEY_SCROLLLOCK;
+    }
     if (code == WB_KEY_LEFTALT) {
         state->left_alt_down = value != 0;
         return code;

@@ -34,11 +34,19 @@ static void test_tab_release_stays_f12_when_alt_releases_first(void) {
     assert(key_remap_apply(&state, WB_KEY_TAB, 0) == WB_KEY_F12);
 }
 
+static void test_left_meta_becomes_scroll_lock_for_full_win_key_bridge(void) {
+    struct key_remap_state state = {0};
+    assert(key_remap_apply(&state, 125, 1) == 70);
+    assert(key_remap_apply(&state, 125, 2) == 70);
+    assert(key_remap_apply(&state, 125, 0) == 70);
+}
+
 int main(void) {
     test_plain_tab_passes_through();
     test_left_alt_tab_becomes_f12();
     test_right_alt_tab_becomes_f12();
     test_tab_release_stays_f12_when_alt_releases_first();
+    test_left_meta_becomes_scroll_lock_for_full_win_key_bridge();
     puts("key_remap_test: OK");
     return 0;
 }

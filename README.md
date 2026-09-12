@@ -1,19 +1,19 @@
 # WorkBuddy Moonlight Alt+Tab 桥接工具
 
-这是为当前小米平板、Moonlight 12.1 与 Windows Sunshine 主机制作的本地快捷键桥接工具。它解决 HyperOS 在 Moonlight 之前截获实体键盘 `Alt+Tab`、导致安卓多任务界面出现或串流暂停的问题。
+这是为当前小米平板、Moonlight 12.1 与 Windows Sunshine 主机制作的本地快捷键桥接工具。它解决 HyperOS 在 Moonlight 之前截获实体键盘 `Alt+Tab` 和 `Command/Left Meta` 的问题，并修复方向键被错误识别为游戏手柄输入的问题。
 
 ## 工作方式
 
 1. Pad 上的 Shizuku 以 ADB shell 身份启动 `WorkBuddy Alt+Tab` 用户服务。
-2. 用户服务部署并守护 `alttab_evdev_bridge`。底层程序独占读取“Xiaomi Keyboard”，把所有普通键原样写回虚拟键盘，只把 `Alt+Tab` 改成 `Alt+F12`。
-3. Moonlight 12.1 能正常转发 `Alt+F12`。
-4. Windows 登录项常驻程序注册全局 `Alt+F12`，收到后补发 `Tab`，所以 Windows 最终执行原生 `Alt+Tab`。
+2. 用户服务部署并守护 `alttab_evdev_bridge`。底层程序独占读取“Xiaomi Keyboard”，把普通键和方向键原样写回虚拟键盘，将 `Alt+Tab` 改成 `Alt+F12`，并将小米键盘的 `Command/Left Meta` 改成 `Scroll Lock`。
+3. Moonlight 12.1 能正常转发 `Alt+F12` 和 `Scroll Lock`。
+4. Windows 登录项常驻程序把 `Alt+F12` 恢复为 Windows `Alt+Tab`，并把 `Scroll Lock` 的按下/抬起恢复为完整的左 Windows 键，因此支持 `Win+E`、`Win+D`、`Win+R` 等组合键。
 
 整个链路不使用辅助功能、不经过网络控制协议、不修改 Moonlight 或 Sunshine。底层程序只输出启动、停止和发生映射的事件，不记录普通键内容。
 
 ## 当前安装状态
 
-- Pad 应用：WorkBuddy Alt+Tab 0.5.1（`local.workbuddy.alttab`）
+- Pad 应用：WorkBuddy Alt+Tab 0.5.2（`local.workbuddy.alttab`）
 - Shizuku：13.6.0，ADB 模式，已授予 WorkBuddy 永久权限
 - Pad 自启动：Shizuku 与 WorkBuddy Alt+Tab 均已允许
 - Windows 程序：`%LOCALAPPDATA%\WorkBuddyAltTab\WorkBuddyAltTabHost.exe`

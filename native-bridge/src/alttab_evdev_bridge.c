@@ -61,7 +61,8 @@ static int configure_virtual_keyboard(int fd, int physical_fd) {
             return -1;
         }
     }
-    if (ioctl(fd, UI_SET_KEYBIT, KEY_F12) != 0) {
+    if (ioctl(fd, UI_SET_KEYBIT, KEY_F12) != 0
+            || ioctl(fd, UI_SET_KEYBIT, KEY_SCROLLLOCK) != 0) {
         return -1;
     }
     if (ioctl(fd, UI_SET_EVBIT, EV_MSC) != 0
@@ -138,7 +139,8 @@ int main(int argc, char **argv) {
         return 5;
     }
 
-    printf("BRIDGE_READY physical=%s remap=ALT+TAB->ALT+F12\n", physical_path);
+    printf("BRIDGE_READY physical=%s remap=ALT+TAB->ALT+F12,META->SCROLLLOCK\n",
+            physical_path);
 
     struct key_remap_state remap_state = {0};
     struct input_event pending_scan;
@@ -191,6 +193,10 @@ int main(int argc, char **argv) {
             event.code = mapped_code;
             if (original_code == WB_KEY_TAB && mapped_code == WB_KEY_F12 && event.value == 1) {
                 printf("REMAP_EVENT ALT+TAB->ALT+F12\n");
+            } else if (original_code == WB_KEY_LEFTMETA
+                    && mapped_code == WB_KEY_SCROLLLOCK
+                    && event.value == 1) {
+                printf("REMAP_EVENT META->SCROLLLOCK\n");
             }
         } else if (has_pending_scan) {
             if (forward_event(virtual_fd, &pending_scan) != 0) {
