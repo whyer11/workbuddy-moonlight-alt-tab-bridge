@@ -1,76 +1,76 @@
-# Moonlight Alt-Tab Bridge Design
+# Moonlight Alt+Tab 桥接工具设计
 
-## Goal
+## 目标
 
-When Moonlight is the foreground app on the Xiaomi Pad, `Alt+Tab` must switch the foreground application on the streamed Windows desktop without opening Android multitasking or pausing the Sunshine session. Outside Moonlight, Android keyboard behavior must remain unchanged.
+当小米平板上的 Moonlight 位于前台时，按下 `Alt+Tab` 必须切换串流 Windows 桌面中的前台程序，不能打开安卓多任务界面，也不能导致 Sunshine 串流暂停。离开 Moonlight 后，安卓原有的键盘行为保持不变。
 
-## Evidence and selected approach
+## 已验证的方案与最终选择
 
-Three approaches were evaluated:
+我们实际验证了三种方案：
 
-1. HyperOS Workstation mode or Android screen pinning prevents Moonlight from losing focus, but the `Alt+Tab` event is swallowed and never reaches Windows.
-2. LSPosed modules can hook Xiaomi's framework keyboard policy, but require root, are ROM-version dependent, and are not validated for this Android 17 / HyperOS 4 device.
-3. A small local bridge can consume only Moonlight's `Alt+Tab` and send an authenticated command over the existing Tailscale link to the Sunshine host. This is the selected approach because it is rootless, does not replace Moonlight, is automatic, and has a narrow security boundary.
+1. 澎湃 OS 工作台模式或安卓“屏幕固定”可以阻止 Moonlight 失去焦点，但 `Alt+Tab` 会被系统直接吞掉，Windows 收不到按键。
+2. LSPosed 模块可以修改小米系统的键盘策略，但需要 Root，并且强依赖系统版本；目前没有证据表明它兼容这台 Android 17 / 澎湃 OS 4 平板。
+3. 制作一个本地小型桥接工具：只拦截 Moonlight 中的 `Alt+Tab`，通过现有 Tailscale 连接向 Sunshine 主机发送经过认证的指令。这是最终选择，因为它不需要 Root、不替换 Moonlight、可自动生效，且权限和网络范围都可以严格限制。
 
-## Architecture
+## 整体架构
 
-The solution has two components:
+工具由两部分组成：
 
-- `android-bridge`: a separate Android application containing an accessibility service. It tracks the active package. When `com.limelight` is active and it receives `KEYCODE_TAB` with an Alt modifier, it consumes the Tab down/up events and sends one `ALT_TAB` command on key-down. All keys and all other applications pass through unchanged.
-- `windows-host`: an invisible per-user Windows process. It listens only on the PC's Tailscale IPv4 address and validates each command before using `SendInput` to press and release `Alt+Tab` in the interactive Windows session.
+- `android-bridge`：独立安装的安卓应用，内部包含一个无障碍服务。它会记录当前前台应用。仅当 `com.limelight` 位于前台并收到“按住 Alt 的 Tab 键”时，才拦截 Tab 的按下和抬起事件，并在按下时发送一次 `ALT_TAB` 指令。其他应用和其他按键全部原样放行。
+- `windows-host`：在当前 Windows 用户会话中静默运行的小程序。它只监听电脑的 Tailscale IPv4 地址；验证指令后，通过 Windows `SendInput` 模拟一次完整的 `Alt+Tab`。
 
-The existing official Moonlight installation, pairing data, Sunshine configuration, display driver, and stream settings are not modified.
+现有官方 Moonlight、配对信息、Sunshine 配置、虚拟显示驱动和串流参数均不修改。
 
-## Wire protocol and security
+## 网络协议与安全边界
 
-- Transport: UDP over Tailscale, PC `100.81.73.56`, Pad `100.74.136.33`, high unassigned port `42837`.
-- Canonical signed value: `v1|timestamp_ms|nonce_hex|ALT_TAB`.
-- Authentication: HMAC-SHA-256 with a random 32-byte key generated during installation.
-- Replay defense: reject timestamps outside a 10-second window and reject a nonce already accepted during that window.
-- Network restriction: the Windows listener binds only to `100.81.73.56`; the firewall rule allows UDP 42837 only from `100.74.136.33`.
-- Secret handling: the key is written to a user-only Windows configuration file and compiled into the locally built APK. It is never printed in logs or the final report.
-- Logs contain timestamps and accept/reject reasons only, never arbitrary keystrokes or secrets.
+- 传输方式：通过 Tailscale 使用 UDP；电脑地址为 `100.81.73.56`，平板地址为 `100.74.136.33`，端口为未占用的高位端口 `42837`。
+- 待签名的标准字符串：`v1|timestamp_ms|nonce_hex|ALT_TAB`。
+- 身份认证：使用安装时随机生成的 32 字节密钥，通过 HMAC-SHA-256 校验。
+- 防重放：时间戳超出 10 秒窗口的指令一律拒绝；同一随机数在该窗口内只能成功使用一次。
+- 网络限制：Windows 程序只绑定 `100.81.73.56`；防火墙只允许 `100.74.136.33` 向 UDP 42837 发送数据。
+- 密钥存放：Windows 端配置文件仅当前用户可读；同一密钥会编译进本机生成的 APK。日志和最终汇报都不会输出密钥。
+- 日志只记录时间和接受或拒绝原因，不记录其他按键内容，也不记录密钥。
 
-## Android behavior
+## 平板端行为
 
-The accessibility service requests key-event filtering and window-state events. It keeps the last active package name and acts only when it is exactly `com.limelight`.
+无障碍服务申请键盘事件过滤和窗口状态事件权限，并保存最后一个前台应用的包名。只有包名严格等于 `com.limelight` 时才会处理快捷键。
 
-For an Alt-modified Tab press:
+检测到按住 Alt 的 Tab 键后：
 
-1. Consume Tab down so HyperOS cannot open multitasking.
-2. Send one authenticated `ALT_TAB` datagram asynchronously.
-3. Consume the matching Tab up.
-4. Leave Alt events unchanged; the Windows host emits a complete atomic `Alt+Tab`, so the result does not depend on Moonlight forwarding the Alt state.
+1. 拦截 Tab 按下事件，阻止澎湃 OS 打开安卓多任务界面。
+2. 异步发送一条经过认证的 `ALT_TAB` 数据报。
+3. 拦截对应的 Tab 抬起事件。
+4. Alt 键本身仍按原方式传递；Windows 端会执行完整、原子化的 `Alt+Tab`，因此结果不依赖 Moonlight 是否已经转发 Alt 状态。
 
-If Tailscale or the PC helper is unavailable, Android still consumes that one shortcut so Moonlight is not paused. No other key is affected.
+如果 Tailscale 或电脑端程序不可用，该快捷键仍会被本地拦截，因此不会导致 Moonlight 暂停；其他按键不受影响。
 
-## Windows behavior
+## 电脑端行为
 
-The host starts at user logon in the interactive session and runs without a visible console window. It validates the sender IP, payload format, HMAC, timestamp, and nonce. Only the exact command `ALT_TAB` is accepted. Valid commands invoke a short `SendInput` sequence: Alt down, Tab down, Tab up, Alt up.
+电脑端程序在用户登录时自动启动，并以无控制台窗口的方式运行。收到数据后依次验证来源 IP、数据格式、HMAC、时间戳和随机数。只接受完全匹配的 `ALT_TAB` 指令。验证成功后执行：Alt 按下、Tab 按下、Tab 抬起、Alt 抬起。
 
-The host process and scheduled task are user-scoped. The firewall rule is the only system-scoped change.
+程序和计划任务都在当前用户范围内运行；唯一的系统级改动是严格限定来源地址和端口的防火墙规则。
 
-## Failure handling and rollback
+## 故障处理与回滚
 
-- Invalid, stale, replayed, or unknown commands are ignored and logged.
-- Network errors keep the host alive and return it to the receive loop.
-- Disabling the accessibility service immediately restores normal Android shortcut behavior.
-- Full rollback removes the APK, scheduled task, firewall rule, and project directory; it does not touch Moonlight or Sunshine.
+- 格式错误、校验错误、超时、重复或未知指令全部忽略并记入日志。
+- 网络异常不会退出电脑端程序，程序会继续等待后续数据。
+- 关闭平板上的无障碍服务后，安卓原有快捷键行为会立即恢复。
+- 完整回滚会卸载桥接 APK，删除登录计划任务和防火墙规则；不会改动 Moonlight 或 Sunshine。
 
-## Verification
+## 验证要求
 
-Automated tests cover:
+自动化测试覆盖：
 
-- Android shortcut decision logic: only Alt-modified Tab in Moonlight is consumed and emits one command.
-- Windows message validation: valid HMAC acceptance plus wrong-MAC, stale-timestamp, unknown-command, and replay rejection.
-- Windows key injection behind an injectable interface so validation tests do not switch windows.
+- 平板端快捷键判定：只有 Moonlight 中的 Alt+Tab 会被拦截，并且每次只发送一条指令。
+- 电脑端消息验证：正确 HMAC 可以通过；错误 HMAC、过期时间戳、未知指令和重复随机数必须被拒绝。
+- Windows 按键注入通过可替换接口测试，验证逻辑测试期间不会真的切换窗口。
 
-The final device test must be performed in normal tablet mode with a live 3408x2272@144 Moonlight session:
+最终真机测试必须在普通平板模式和实际的 3408×2272、144 FPS Moonlight 串流中完成：
 
-1. Record the Android resumed activity and Windows foreground title.
-2. Send a real Alt+Tab combination from the Pad keyboard path.
-3. Verify Android remains on `com.limelight/.Game`.
-4. Verify Sunshine still reports one active session and no disconnect.
-5. Verify the Windows foreground title changes.
-6. Verify Alt+Tab outside Moonlight still opens Android multitasking normally.
+1. 记录安卓当前恢复的 Activity 和 Windows 前台窗口标题。
+2. 从平板键盘路径触发一次真实的 Alt+Tab 组合键。
+3. 确认安卓仍停留在 `com.limelight/.Game`。
+4. 确认 Sunshine 仍有一个活动会话，且没有断开记录。
+5. 确认 Windows 前台窗口标题发生变化。
+6. 确认离开 Moonlight 后，Alt+Tab 仍能正常打开安卓多任务界面。
 
