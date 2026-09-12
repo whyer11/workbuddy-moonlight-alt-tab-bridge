@@ -1,4 +1,5 @@
-#include <windows.h>
+#include "WorkBuddyStatusProtocol.h"
+#include "WorkBuddyStatusServer.h"
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -132,15 +133,28 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
         return 5;
     }
 
+    struct wb_status_server status_server;
+    if (!wb_status_server_start(&status_server, WB_STATUS_PORT)) {
+        DWORD error = WSAGetLastError();
+        write_log(L"STATUS_SERVER_FAILED port=%u error=%lu", WB_STATUS_PORT, error);
+        UnhookWindowsHookEx(keyboard_hook);
+        UnregisterHotKey(NULL, HOTKEY_ALT_F12);
+        CloseHandle(mutex);
+        return 6;
+    }
+
     if (probe_only) {
-        write_log(L"PROBE_OK hotkey=ALT+F12 sentinel=SCROLLLOCK action=LWIN");
+        write_log(L"PROBE_OK hotkey=ALT+F12 sentinel=SCROLLLOCK action=LWIN status=UDP:%u",
+                WB_STATUS_PORT);
+        wb_status_server_stop(&status_server);
         UnhookWindowsHookEx(keyboard_hook);
         UnregisterHotKey(NULL, HOTKEY_ALT_F12);
         CloseHandle(mutex);
         return 0;
     }
 
-    write_log(L"HOST_READY hotkey=ALT+F12 action=ALT+TAB sentinel=SCROLLLOCK action=LWIN");
+    write_log(L"HOST_READY hotkey=ALT+F12 action=ALT+TAB sentinel=SCROLLLOCK action=LWIN status=UDP:%u",
+            WB_STATUS_PORT);
     MSG message;
     int result;
     while ((result = GetMessageW(&message, NULL, 0, 0)) > 0) {
@@ -150,6 +164,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
         }
     }
 
+    wb_status_server_stop(&status_server);
     release_win_key();
     UnhookWindowsHookEx(keyboard_hook);
     UnregisterHotKey(NULL, HOTKEY_ALT_F12);
