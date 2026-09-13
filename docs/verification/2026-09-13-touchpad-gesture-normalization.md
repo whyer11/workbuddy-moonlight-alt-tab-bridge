@@ -71,6 +71,22 @@ Gradle debug APK 使用 Android Debug 证书，只作为构建验证产物；设
 
 首次安装 WorkBuddy 0.9.0 后，三指续拖保持 `0 ms`。只有 Moonlight WorkBuddy 完成实体触摸板 gate、双指滚动归一化和真机验证后，才切换为 `1000 ms`。
 
+## WorkBuddy 0.9.1 可配置落下容错
+
+- 提交：`cd18da1`
+- 版本：`versionCode 12` / `versionName 0.9.1`；Shizuku UserService 版本同步为 12。
+- 新增“三指落下容错”配置：默认 `150 ms`，范围 `0..500 ms`，步长 `1 ms`；`0 ms` 保留严格模式。
+- 容错截止时间不会突破原续拖总截止时间；一指或两指实际移动、未形成三指即再次抬起、第四指和任一截止时间到期都会只释放一次左键。
+- `generated_schema_test`、`key_remap_test`、`native_protocol_test`、`bridge_options_test`、`touchpad_drag_state_test`：全部 `OK`。
+- `:app:testDebugUnitTest :app:assembleDebug`：`BUILD SUCCESSFUL`（39 tasks）。
+- native 与 APK asset SHA-256：`ECA10CD7E9AC611F295D6B6DCAEB190E47CFF1D0C451822786EDFA4D25076ED3`。
+- 同证书升级 APK：`android-bridge/app/build/outputs/apk/debug/workbuddy-alt-tab-0.9.1.apk`。
+- APK SHA-256：`7BB52FD3FFF226B296EDF257CF13A31475E6B6C685392F70155654432D7E5935`。
+- APK 签名证书 SHA-256：`CB952E9472E9970483FA68E9474ADA70A5A98DA35B6F9EABB1D5A8B5B8D8B7D0`。
+- Pad 已升级为 0.9.1；UserService 自动从 PID 6326 切换为 8419，native 为 PID 8651，设备 native 哈希与候选版一致。
+- 首次实装参数：`--three-finger-speed-percent 25 --three-finger-continuation-ms 1500 --three-finger-reacquire-ms 150`。
+- 最终舒适参数与手工验收：待用户调校确认。
+
 ## 待补充的端到端证据
 
 - WorkBuddy 0.9.0 同签名原位升级结果
