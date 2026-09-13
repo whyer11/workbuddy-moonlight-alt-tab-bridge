@@ -10,7 +10,7 @@ if (-not (Test-Path -LiteralPath $schemaPath) -or -not (Test-Path -LiteralPath $
 
 $schema = Get-Content -Raw -LiteralPath $schemaPath | ConvertFrom-Json
 $ruleIds = @($schema.rules | ForEach-Object { $_.id })
-if (($ruleIds -join ',') -ne 'alt_tab,windows_key,arrow_keys') {
+if (($ruleIds -join ',') -ne 'alt_tab,windows_key,arrow_keys,three_finger_drag') {
     throw "Unexpected rule order: $($ruleIds -join ',')"
 }
 if (($ruleIds | Sort-Object -Unique).Count -ne $ruleIds.Count) {

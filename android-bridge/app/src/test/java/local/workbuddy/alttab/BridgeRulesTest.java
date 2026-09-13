@@ -15,7 +15,7 @@ public final class BridgeRulesTest {
     public void catalogDescribesEveryCurrentBridge() {
         List<BridgeRule> rules = BridgeRules.all();
 
-        assertEquals(Arrays.asList("alt_tab", "windows_key", "arrow_keys"),
+        assertEquals(Arrays.asList("alt_tab", "windows_key", "arrow_keys", "three_finger_drag"),
                 rules.stream().map(BridgeRule::id).collect(Collectors.toList()));
         assertEquals("Alt+Tab", rules.get(0).padInput());
         assertEquals("Alt+F12", rules.get(0).padOutput());
@@ -26,9 +26,13 @@ public final class BridgeRulesTest {
         assertEquals("上 / 下 / 左 / 右", rules.get(2).padInput());
         assertEquals("原键值直通", rules.get(2).padOutput());
         assertEquals("Windows 方向键", rules.get(2).windowsAction());
+        assertEquals("三指移动", rules.get(3).padInput());
+        assertEquals("虚拟鼠标左键拖动", rules.get(3).padOutput());
+        assertEquals("Windows 左键拖动", rules.get(3).windowsAction());
         assertTrue(rules.get(0).requiresComputer());
         assertTrue(rules.get(1).requiresComputer());
         assertFalse(rules.get(2).requiresComputer());
+        assertFalse(rules.get(3).requiresComputer());
     }
 
     @Test(expected = UnsupportedOperationException.class)

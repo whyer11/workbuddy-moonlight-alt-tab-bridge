@@ -10,6 +10,7 @@ public final class BridgeRules {
     public static final String ALT_TAB = "alt_tab";
     public static final String WINDOWS_KEY = "windows_key";
     public static final String ARROW_KEYS = "arrow_keys";
+    public static final String THREE_FINGER_DRAG = "three_finger_drag";
 
     private static final List<BridgeRule> RULES = createRules();
 
