@@ -1,6 +1,7 @@
 param(
     [string] $Compiler = 'gcc',
-    [string] $Version = $env:RELEASE_VERSION
+    [string] $Version = $env:RELEASE_VERSION,
+    [switch] $SkipInteractiveTests
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,8 +77,10 @@ Invoke-Compiler -Arguments (@(
     'windows-host\src\WorkBuddyStatusServer.c'
 ) + $commonFlags + @('-pedantic', '-o', $statusServerTest, '-lws2_32'))
 
-Invoke-TestExecutable -Path $altTabTest
-Invoke-TestExecutable -Path $winKeyTest
+if (-not $SkipInteractiveTests) {
+    Invoke-TestExecutable -Path $altTabTest
+    Invoke-TestExecutable -Path $winKeyTest
+}
 Invoke-TestExecutable -Path $statusProtocolTest
 Invoke-TestExecutable -Path $statusServerTest
 
