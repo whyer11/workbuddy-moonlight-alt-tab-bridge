@@ -18,7 +18,8 @@ function Write-Generated([string]$relativePath, [string]$content) {
     $path = Join-Path $OutputRoot $relativePath
     $directory = Split-Path -Parent $path
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
-    [System.IO.File]::WriteAllText($path, ($content.TrimEnd() + "`n"), $utf8)
+    $normalized = $content.Replace("`r`n", "`n").TrimEnd() + "`n"
+    [System.IO.File]::WriteAllText($path, $normalized, $utf8)
 }
 
 $javaRules = foreach ($rule in $schema.rules) {
