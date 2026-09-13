@@ -1,3 +1,4 @@
+#include "bridge_options.h"
 #include "key_remap.h"
 #include "native_protocol.h"
 #include "touchpad_bridge.h"
@@ -9,10 +10,12 @@
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <time.h>
 #include <unistd.h>
 
 static volatile sig_atomic_t stop_requested = 0;
@@ -23,6 +26,14 @@ static volatile sig_atomic_t stop_requested = 0;
 static void request_stop(int signal_number) {
     (void)signal_number;
     stop_requested = 1;
+}
+
+static int64_t monotonic_ms(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        return -1;
+    }
+    return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
 }
 
 static int find_keyboard(char *path, size_t path_size) {
@@ -109,16 +120,21 @@ int main(int argc, char **argv) {
         puts(description);
         return 0;
     }
-    if (argc > 2 || (argc == 2 && argv[1][0] == '-')) {
-        fprintf(stderr, "USAGE: %s [--describe|/dev/input/eventN]\n", argv[0]);
+    struct wb_bridge_options options;
+    wb_bridge_options_init(&options);
+    if (wb_bridge_options_parse(&options, argc, argv) != 0) {
+        fprintf(stderr, "USAGE: %s [--describe] "
+                "[--three-finger-speed-percent N] "
+                "[--three-finger-continuation-ms N] "
+                "[/dev/input/eventN]\n", argv[0]);
         return 9;
     }
 
     char detected_path[64] = {0};
     const char *physical_path = NULL;
     int physical_fd = -1;
-    if (argc > 1) {
-        physical_path = argv[1];
+    if (options.keyboard_path != NULL) {
+        physical_path = options.keyboard_path;
         physical_fd = open(physical_path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     } else {
         physical_fd = find_keyboard(detected_path, sizeof(detected_path));
@@ -153,8 +169,9 @@ int main(int argc, char **argv) {
     int result = 0;
     struct wb_touchpad_drag_config drag_config = {
         .activation_distance = 48,
-        .movement_numerator = 1,
-        .movement_denominator = 1,
+        .movement_numerator = options.three_finger_speed_percent,
+        .movement_denominator = 100,
+        .continuation_ms = options.three_finger_continuation_ms,
     };
     if (wb_touchpad_bridge_open(&touchpad, drag_config) != 0) {
         fprintf(stderr, "TOUCHPAD_OPEN_FAILED errno=%d message=%s\n",
@@ -163,7 +180,10 @@ int main(int argc, char **argv) {
         goto cleanup;
     }
     printf("TOUCHPAD_READY physical=%s virtual=WorkBuddy_Virtual_Mouse "
-            "threshold=48 scale=1/1\n", wb_touchpad_bridge_path(&touchpad));
+            "threshold=48 speed=%d%% continuation=%dms\n",
+            wb_touchpad_bridge_path(&touchpad),
+            options.three_finger_speed_percent,
+            options.three_finger_continuation_ms);
 
     usleep(350000);
     if (ioctl(physical_fd, EVIOCGRAB, 1) != 0) {
@@ -189,13 +209,33 @@ int main(int argc, char **argv) {
         {.fd = wb_touchpad_bridge_fd(&touchpad), .events = POLLIN},
     };
     while (!stop_requested) {
-        int ready = poll(poll_fds, 2, 500);
+        int64_t before_poll = monotonic_ms();
+        if (before_poll < 0) {
+            fprintf(stderr, "CLOCK_FAILED errno=%d message=%s\n", errno, strerror(errno));
+            result = 13;
+            break;
+        }
+        int timeout = wb_touchpad_bridge_next_timeout_ms(
+                &touchpad, before_poll, 500);
+        int ready = poll(poll_fds, 2, timeout);
         if (ready < 0) {
             if (errno == EINTR) {
                 continue;
             }
             fprintf(stderr, "POLL_FAILED errno=%d message=%s\n", errno, strerror(errno));
             result = 6;
+            break;
+        }
+        int64_t after_poll = monotonic_ms();
+        if (after_poll < 0) {
+            fprintf(stderr, "CLOCK_FAILED errno=%d message=%s\n", errno, strerror(errno));
+            result = 13;
+            break;
+        }
+        if (wb_touchpad_bridge_tick(&touchpad, after_poll) != 0) {
+            fprintf(stderr, "TOUCHPAD_IO_FAILED errno=%d message=%s\n",
+                    errno, strerror(errno));
+            result = 12;
             break;
         }
         if (ready == 0) {
@@ -208,7 +248,7 @@ int main(int argc, char **argv) {
             break;
         }
         if ((poll_fds[1].revents & POLLIN) != 0
-                && wb_touchpad_bridge_drain(&touchpad) != 0) {
+                && wb_touchpad_bridge_drain(&touchpad, after_poll) != 0) {
             fprintf(stderr, "TOUCHPAD_IO_FAILED errno=%d message=%s\n",
                     errno, strerror(errno));
             result = 12;

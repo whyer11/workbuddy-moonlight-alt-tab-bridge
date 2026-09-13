@@ -142,7 +142,8 @@ const char *wb_touchpad_bridge_path(const struct wb_touchpad_bridge *bridge) {
 }
 
 static int consume_event(struct wb_touchpad_bridge *bridge,
-                         const struct input_event *event) {
+                         const struct input_event *event,
+                         int64_t now_ms) {
     if (event->type == EV_ABS) {
         if (event->code == ABS_MT_SLOT) {
             wb_touchpad_drag_select_slot(&bridge->drag_state, event->value);
@@ -159,17 +160,21 @@ static int consume_event(struct wb_touchpad_bridge *bridge,
         return 0;
     }
     if (event->code == SYN_DROPPED) {
+        if (emit_output(bridge->virtual_fd,
+                wb_touchpad_drag_cancel(&bridge->drag_state)) != 0) {
+            return -1;
+        }
         errno = EOVERFLOW;
         return -1;
     }
     if (event->code == SYN_REPORT) {
         return emit_output(bridge->virtual_fd,
-                wb_touchpad_drag_finish_frame(&bridge->drag_state));
+                wb_touchpad_drag_finish_frame(&bridge->drag_state, now_ms));
     }
     return 0;
 }
 
-int wb_touchpad_bridge_drain(struct wb_touchpad_bridge *bridge) {
+int wb_touchpad_bridge_drain(struct wb_touchpad_bridge *bridge, int64_t now_ms) {
     if (bridge == NULL || bridge->physical_fd < 0 || bridge->virtual_fd < 0) {
         errno = EINVAL;
         return -1;
@@ -191,8 +196,27 @@ int wb_touchpad_bridge_drain(struct wb_touchpad_bridge *bridge) {
             }
             return -1;
         }
-        if (consume_event(bridge, &event) != 0) {
+        if (consume_event(bridge, &event, now_ms) != 0) {
             return -1;
         }
     }
+}
+
+int wb_touchpad_bridge_tick(struct wb_touchpad_bridge *bridge, int64_t now_ms) {
+    if (bridge == NULL || bridge->virtual_fd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    return emit_output(bridge->virtual_fd,
+            wb_touchpad_drag_tick(&bridge->drag_state, now_ms));
+}
+
+int wb_touchpad_bridge_next_timeout_ms(const struct wb_touchpad_bridge *bridge,
+                                       int64_t now_ms,
+                                       int fallback_ms) {
+    if (bridge == NULL) {
+        return fallback_ms;
+    }
+    return wb_touchpad_drag_next_timeout_ms(
+            &bridge->drag_state, now_ms, fallback_ms);
 }
