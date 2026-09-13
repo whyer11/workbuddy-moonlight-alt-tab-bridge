@@ -162,6 +162,82 @@ static void test_resume_frame_never_moves_cursor(void) {
     assert_output(wb_touchpad_drag_finish_frame(&state, 500), WB_DRAG_NONE, 0, 0);
 }
 
+static void test_new_single_contact_after_empty_grace_releases_immediately(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 0);
+    end_contact(&state, 1);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    begin_contact(&state, 0, 200, 400, 400);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300),
+                  WB_DRAG_LEFT_UP, 0, 0);
+    assert(state.phase == WB_TOUCHPAD_IDLE);
+}
+
+static void test_new_two_contacts_after_empty_grace_release_immediately(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 0);
+    end_contact(&state, 1);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    begin_contact(&state, 0, 200, 400, 400);
+    begin_contact(&state, 1, 201, 700, 400);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300),
+                  WB_DRAG_LEFT_UP, 0, 0);
+}
+
+static void test_two_finger_motion_during_grace_releases_immediately(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    move_contact(&state, 0, 360, 300);
+    move_contact(&state, 1, 660, 300);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300),
+                  WB_DRAG_LEFT_UP, 0, 0);
+}
+
+static void test_staggered_lift_without_new_input_preserves_grace(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    end_contact(&state, 1);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 210), WB_DRAG_NONE, 0, 0);
+    end_contact(&state, 0);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 220), WB_DRAG_NONE, 0, 0);
+    assert(state.phase == WB_TOUCHPAD_GRACE);
+    assert(state.button_down);
+}
+
+static void test_three_contacts_after_empty_grace_resume_without_second_down(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 0);
+    end_contact(&state, 1);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    begin_three_contacts(&state, 100, 100);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300), WB_DRAG_NONE, 0, 0);
+    assert(state.phase == WB_TOUCHPAD_DRAGGING);
+    assert(state.button_down);
+}
+
+static void test_invalid_grace_input_releases_only_once(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 0);
+    end_contact(&state, 1);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    begin_contact(&state, 0, 200, 400, 400);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300),
+                  WB_DRAG_LEFT_UP, 0, 0);
+    assert_output(wb_touchpad_drag_tick(&state, 1800), WB_DRAG_NONE, 0, 0);
+}
+
 static void test_tick_at_1000ms_releases_exactly_once(void) {
     struct wb_touchpad_drag_state state;
     start_drag(&state);
@@ -236,6 +312,12 @@ int main(void) {
     test_lift_enters_grace_without_releasing();
     test_resume_at_999ms_rebases_without_up_or_second_down();
     test_resume_frame_never_moves_cursor();
+    test_new_single_contact_after_empty_grace_releases_immediately();
+    test_new_two_contacts_after_empty_grace_release_immediately();
+    test_two_finger_motion_during_grace_releases_immediately();
+    test_staggered_lift_without_new_input_preserves_grace();
+    test_three_contacts_after_empty_grace_resume_without_second_down();
+    test_invalid_grace_input_releases_only_once();
     test_tick_at_1000ms_releases_exactly_once();
     test_resume_at_1000ms_releases_then_arms_new_drag();
     test_fourth_finger_releases_immediately_during_drag();

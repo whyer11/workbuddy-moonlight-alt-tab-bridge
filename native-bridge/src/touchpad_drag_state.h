@@ -55,6 +55,9 @@ struct wb_touchpad_drag_state {
     long long remainder_y;
     bool button_down;
     bool composition_changed;
+    bool frame_contact_started;
+    bool frame_position_updated;
+    bool grace_observed_no_contacts;
     struct wb_touchpad_drag_config config;
 };
 

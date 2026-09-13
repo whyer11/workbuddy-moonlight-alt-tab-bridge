@@ -17,6 +17,7 @@ static void clear_motion_runtime(struct wb_touchpad_drag_state *state) {
     state->grace_deadline_ms = 0;
     state->remainder_x = 0;
     state->remainder_y = 0;
+    state->grace_observed_no_contacts = false;
 }
 
 static void enter_idle(struct wb_touchpad_drag_state *state) {
@@ -80,6 +81,7 @@ void wb_touchpad_drag_set_tracking_id(struct wb_touchpad_drag_state *state, int 
     slot->active = true;
     slot->has_x = false;
     slot->has_y = false;
+    state->frame_contact_started = true;
 }
 
 void wb_touchpad_drag_set_x(struct wb_touchpad_drag_state *state, int x) {
@@ -90,6 +92,7 @@ void wb_touchpad_drag_set_x(struct wb_touchpad_drag_state *state, int x) {
     if (slot->active) {
         slot->x = x;
         slot->has_x = true;
+        state->frame_position_updated = true;
     }
 }
 
@@ -101,6 +104,7 @@ void wb_touchpad_drag_set_y(struct wb_touchpad_drag_state *state, int y) {
     if (slot->active) {
         slot->y = y;
         slot->has_y = true;
+        state->frame_position_updated = true;
     }
 }
 
@@ -193,7 +197,11 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
     }
 
     bool composition_changed = state->composition_changed;
+    bool contact_started = state->frame_contact_started;
+    bool position_updated = state->frame_position_updated;
     state->composition_changed = false;
+    state->frame_contact_started = false;
+    state->frame_position_updated = false;
 
     if (active_count >= 4) {
         return release_if_pressed(state);
@@ -207,17 +215,31 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
         return expired;
     }
 
+    bool entered_grace_this_frame = false;
     if (state->phase == WB_TOUCHPAD_DRAGGING
             && (active_count != 3 || composition_changed)) {
         struct wb_touchpad_drag_output output = enter_grace(state, now_ms);
         if (output.actions != WB_DRAG_NONE) {
             return output;
         }
+        entered_grace_this_frame = true;
     }
 
     if (state->phase == WB_TOUCHPAD_GRACE) {
+        if (active_count == 0) {
+            state->grace_observed_no_contacts = true;
+            return no_output();
+        }
         if (active_count == 3 && coordinates_complete) {
             resume_at(state, sum_x / 3, sum_y / 3);
+            return no_output();
+        }
+        if (!entered_grace_this_frame
+                && active_count < 3
+                && (state->grace_observed_no_contacts
+                    || contact_started
+                    || position_updated)) {
+            return release_if_pressed(state);
         }
         return no_output();
     }
