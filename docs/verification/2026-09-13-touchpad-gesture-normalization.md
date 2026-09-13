@@ -52,6 +52,21 @@ Gradle debug APK 使用 Android Debug 证书，只作为构建验证产物；设
 - 用户在 Moonlight WorkBuddy 中确认双指滚动已修复，不再出现此前的双倍或更大幅度移动。
 - 当前结论为手感验收通过；Windows wheel 单包 P95 与 30 mm 定量数据仍待采集。
 
+## 非三指输入立即打断续拖候选版
+
+- 提交：`96279a3`
+- 规则：续拖空档中出现新的一指、两指或对应位移时立即发送一次 `LEFT_UP`；仅抬手过渡不误打断；三指恢复不重复发送 `LEFT_DOWN`。
+- 新增状态机测试覆盖一指、两指、两指移动、交错抬手、三指恢复以及重复释放防护。
+- `touchpad_drag_state_test`、`key_remap_test`、`native_protocol_test`、`bridge_options_test`、`generated_schema_test`：全部 `OK`。
+- NDK 29 ARM64 严格构建：零警告。
+- native 与 APK asset SHA-256：`4A3112B63420942E0B0EA7B51F1EA322AD309F7D98BEB2F2FCA07B73D861B759`。
+- `:app:testDebugUnitTest :app:assembleDebug`：`BUILD SUCCESSFUL`（39 tasks）。
+- 同证书升级 APK SHA-256：`23D10F9937C0120D87970093AB7C4353B665665925033A73C9986EE5C350EDA6`。
+- APK 签名证书 SHA-256：`CB952E9472E9970483FA68E9474ADA70A5A98DA35B6F9EABB1D5A8B5B8D8B7D0`。
+- Pad 已覆盖安装；重启 Shizuku UserService 后，设备 native 哈希与候选版一致。
+- 设备启动参数：`--three-finger-speed-percent 25 --three-finger-continuation-ms 1500`。
+- 一指、两指立即打断与三指直接恢复的手工验收：待用户确认。
+
 ## 启用门槛
 
 首次安装 WorkBuddy 0.9.0 后，三指续拖保持 `0 ms`。只有 Moonlight WorkBuddy 完成实体触摸板 gate、双指滚动归一化和真机验证后，才切换为 `1000 ms`。
