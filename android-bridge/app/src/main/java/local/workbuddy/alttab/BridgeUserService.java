@@ -4,128 +4,58 @@ import android.content.Context;
 import android.os.Binder;
 import android.os.Parcel;
 import android.os.RemoteException;
-import android.system.Os;
 import android.util.Log;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import local.workbuddy.alttab.nativebridge.AndroidNativeBackend;
+import local.workbuddy.alttab.nativebridge.NativeBridgeInstaller;
+import local.workbuddy.alttab.nativebridge.NativeBridgeSupervisor;
+import local.workbuddy.alttab.shizuku.BridgeBinderProtocolV2;
 
 public final class BridgeUserService extends Binder {
     private static final String TAG = "WorkBuddyAltTab";
-    private static final String BRIDGE_PATH = "/data/local/tmp/alttab_evdev_bridge";
     private static final int SHIZUKU_USER_SERVICE_DESTROY = 16777115;
-    private volatile boolean destroyed;
-    private volatile Process bridgeProcess;
+    private final NativeBridgeSupervisor supervisor;
 
     public BridgeUserService() {
-        startSupervisor();
+        supervisor = new NativeBridgeSupervisor(AndroidNativeBackend.TARGET_PATH);
     }
 
     public BridgeUserService(Context context) {
-        deployBundledBridge(context);
-        startSupervisor();
+        NativeBridgeInstaller.InstallResult result = new NativeBridgeInstaller(
+                new AndroidNativeBackend(context)).install();
+        Log.i(TAG, "Native deployment result=" + result);
+        cleanUpOldBridge();
+        supervisor = new NativeBridgeSupervisor(AndroidNativeBackend.TARGET_PATH);
     }
 
-    private void deployBundledBridge(Context context) {
-        File staged = new File(BRIDGE_PATH + ".new");
-        File target = new File(BRIDGE_PATH);
-        try (InputStream input = context.getAssets().open("alttab_evdev_bridge");
-             FileOutputStream output = new FileOutputStream(staged, false)) {
-            byte[] buffer = new byte[8192];
-            int count;
-            while ((count = input.read(buffer)) != -1) {
-                output.write(buffer, 0, count);
-            }
-            output.getFD().sync();
-            Os.chmod(staged.getAbsolutePath(), 0700);
-            Os.rename(staged.getAbsolutePath(), target.getAbsolutePath());
-            Log.i(TAG, "Bundled native bridge deployed");
-        } catch (Throwable error) {
-            Log.e(TAG, "Cannot deploy bundled native bridge", error);
-        } finally {
-            if (staged.exists() && !staged.delete()) {
-                Log.w(TAG, "Cannot remove staged native bridge");
-            }
-        }
-    }
-
-    private void startSupervisor() {
-        Thread supervisor = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                cleanUpOldBridge();
-                while (!destroyed) {
-                    runBridgeOnce();
-                    if (!destroyed) {
-                        try {
-                            Thread.sleep(1000);
-                        } catch (InterruptedException ignored) {
-                            Thread.currentThread().interrupt();
-                        }
-                    }
-                }
-            }
-        }, "WorkBuddyBridgeSupervisor");
-        supervisor.setDaemon(true);
-        supervisor.start();
-    }
-
-    private void cleanUpOldBridge() {
+    private static void cleanUpOldBridge() {
         try {
-            Process oldBridge = new ProcessBuilder(
-                    "/system/bin/pkill", "-f", BRIDGE_PATH)
-                    .start();
-            oldBridge.waitFor();
+            Process process = new ProcessBuilder("/system/bin/pkill", "-f",
+                    AndroidNativeBackend.TARGET_PATH).start();
+            process.waitFor();
             Thread.sleep(250);
         } catch (Throwable error) {
             Log.w(TAG, "Old bridge cleanup failed", error);
         }
     }
 
-    private void runBridgeOnce() {
-        try {
-            Process process = new ProcessBuilder(BRIDGE_PATH)
-                    .redirectErrorStream(true)
-                    .start();
-            bridgeProcess = process;
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    Log.i(TAG, "native: " + line);
-                }
-            }
-            int exitCode = process.waitFor();
-            bridgeProcess = null;
-            if (!destroyed) {
-                Log.w(TAG, "Native bridge exited with " + exitCode + ", restarting");
-            }
-        } catch (Throwable error) {
-            bridgeProcess = null;
-            if (!destroyed) {
-                Log.e(TAG, "Native bridge supervisor error", error);
-            }
-        }
-    }
-
     public void destroy() {
-        destroyed = true;
-        Process process = bridgeProcess;
-        if (process != null) {
-            process.destroy();
-        }
+        supervisor.close();
         System.exit(0);
     }
 
-    @Override
-    protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
+    @Override protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
             throws RemoteException {
-        if (code == BridgeServiceProtocol.TRANSACTION_STATUS) {
+        if (code == BridgeBinderProtocolV2.TRANSACTION_STATUS) {
+            data.enforceInterface(BridgeBinderProtocolV2.DESCRIPTOR);
             reply.writeNoException();
-            BridgeServiceProtocol.writeStatus(reply, isNativeBridgeAlive());
+            BridgeBinderProtocolV2.writeStatus(reply, supervisor.snapshot(), supervisor.active());
+            return true;
+        }
+        if (code == BridgeBinderProtocolV2.TRANSACTION_SET_ACTIVE) {
+            data.enforceInterface(BridgeBinderProtocolV2.DESCRIPTOR);
+            supervisor.setActive(data.readInt() != 0);
+            reply.writeNoException();
             return true;
         }
         if (code == SHIZUKU_USER_SERVICE_DESTROY) {
@@ -133,10 +63,5 @@ public final class BridgeUserService extends Binder {
             return true;
         }
         return super.onTransact(code, data, reply, flags);
-    }
-
-    private boolean isNativeBridgeAlive() {
-        Process process = bridgeProcess;
-        return process != null && process.isAlive();
     }
 }

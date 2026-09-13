@@ -18,12 +18,12 @@ public final class ComputerStatusClientTest {
     @Test
     public void validResponseReportsHostAndSupportedRules() throws Exception {
         try (FakeResponder responder = new FakeResponder(
-                "WB_STATUS_V1 " + NONCE
-                        + " host=0.6.0 rules=alt_tab,windows_key", false)) {
+                "WB_STATUS_V2 nonce=" + NONCE
+                        + " host=0.7.0 protocol=2 core=ready rules=alt_tab,windows_key", false)) {
             ComputerStatus status = client(responder.port()).probe("127.0.0.1", 500);
 
             assertTrue(status.reachable());
-            assertEquals("0.6.0", status.hostVersion());
+            assertEquals("0.7.0", status.hostVersion());
             assertTrue(status.ruleIds().contains("alt_tab"));
             assertTrue(status.ruleIds().contains("windows_key"));
             responder.assertSucceeded();
@@ -33,14 +33,14 @@ public final class ComputerStatusClientTest {
     @Test
     public void wrongNonceOrProtocolIsRejected() throws Exception {
         try (FakeResponder responder = new FakeResponder(
-                "WB_STATUS_V1 ffffffffffffffffffffffffffffffff"
-                        + " host=0.6.0 rules=alt_tab,windows_key", false)) {
+                "WB_STATUS_V2 nonce=ffffffffffffffffffffffffffffffff"
+                        + " host=0.7.0 protocol=2 core=ready rules=alt_tab,windows_key", false)) {
             assertFalse(client(responder.port()).probe("127.0.0.1", 500).reachable());
             responder.assertSucceeded();
         }
 
         try (FakeResponder responder = new FakeResponder(
-                "WB_STATUS_V2 " + NONCE
+                "WB_STATUS_V1 " + NONCE
                         + " host=0.6.0 rules=alt_tab,windows_key", false)) {
             assertFalse(client(responder.port()).probe("127.0.0.1", 500).reachable());
             responder.assertSucceeded();
@@ -50,8 +50,8 @@ public final class ComputerStatusClientTest {
     @Test
     public void responseFromUnexpectedSourcePortIsRejected() throws Exception {
         try (FakeResponder responder = new FakeResponder(
-                "WB_STATUS_V1 " + NONCE
-                        + " host=0.6.0 rules=alt_tab,windows_key", true)) {
+                "WB_STATUS_V2 nonce=" + NONCE
+                        + " host=0.7.0 protocol=2 core=ready rules=alt_tab,windows_key", true)) {
             assertFalse(client(responder.port()).probe("127.0.0.1", 500).reachable());
             responder.assertSucceeded();
         }
@@ -99,7 +99,7 @@ public final class ComputerStatusClientTest {
                 String requestText = new String(
                         request.getData(), request.getOffset(), request.getLength(),
                         StandardCharsets.UTF_8);
-                if (!requestText.equals("WB_STATUS_V1 " + NONCE)) {
+                if (!requestText.equals("WB_STATUS_V2 nonce=" + NONCE)) {
                     throw new AssertionError("Unexpected request: " + requestText);
                 }
 

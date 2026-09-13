@@ -7,3 +7,4 @@ android-sdk/
 local.properties
 config/config.json
 *.user
+*.exe

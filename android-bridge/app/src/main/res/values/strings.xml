@@ -4,6 +4,8 @@
     <string name="bridge_title">Moonlight 键盘桥接</string>
     <string name="bridge_description">集中查看已配置的按键转换，以及 Pad 底层桥接和 Windows Host 的实时运行状态。</string>
     <string name="start_bridge">授权并启动底层桥接</string>
+    <string name="pause_bridge">暂停键盘拦截</string>
+    <string name="resume_bridge">恢复键盘拦截</string>
     <string name="computer_status_title">电脑端实时状态</string>
     <string name="computer_host_hint">电脑 Tailscale IPv4 或 MagicDNS 名称</string>
     <string name="save_computer_host">保存</string>

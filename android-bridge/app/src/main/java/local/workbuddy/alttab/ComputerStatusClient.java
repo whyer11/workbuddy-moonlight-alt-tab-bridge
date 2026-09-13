@@ -8,10 +8,12 @@ import java.security.SecureRandom;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+import local.workbuddy.alttab.generated.GeneratedBridgeSchema;
+
 public final class ComputerStatusClient {
-    static final int DEFAULT_PORT = 57420;
-    private static final String PROTOCOL = "WB_STATUS_V1";
-    private static final int NONCE_BYTES = 16;
+    static final int DEFAULT_PORT = GeneratedBridgeSchema.STATUS_PORT;
+    private static final String PROTOCOL = "WB_STATUS_V2";
+    private static final int NONCE_BYTES = GeneratedBridgeSchema.NONCE_HEX_LENGTH / 2;
 
     interface NonceSource {
         String nextNonce();
@@ -43,7 +45,7 @@ public final class ComputerStatusClient {
             if (nonce == null || nonce.length() != NONCE_BYTES * 2) {
                 return ComputerStatus.offline();
             }
-            byte[] requestBytes = (PROTOCOL + " " + nonce)
+            byte[] requestBytes = (PROTOCOL + " nonce=" + nonce)
                     .getBytes(StandardCharsets.UTF_8);
 
             try (DatagramSocket socket = new DatagramSocket()) {
@@ -52,7 +54,7 @@ public final class ComputerStatusClient {
                         requestBytes, requestBytes.length, target, port);
                 socket.send(request);
 
-                byte[] responseBytes = new byte[512];
+                byte[] responseBytes = new byte[GeneratedBridgeSchema.MAX_DATAGRAM_BYTES + 1];
                 DatagramPacket response = new DatagramPacket(
                         responseBytes, responseBytes.length);
                 socket.receive(response);
@@ -72,16 +74,18 @@ public final class ComputerStatusClient {
 
     private static ComputerStatus parseResponse(String response, String expectedNonce) {
         String[] fields = response.split(" ", -1);
-        if (fields.length != 4
+        if (fields.length != 6
                 || !PROTOCOL.equals(fields[0])
-                || !expectedNonce.equals(fields[1])
+                || !fields[1].equals("nonce=" + expectedNonce)
                 || !fields[2].startsWith("host=")
-                || !fields[3].startsWith("rules=")) {
+                || !fields[3].equals("protocol=" + GeneratedBridgeSchema.PROTOCOL_VERSION)
+                || !fields[4].equals("core=ready")
+                || !fields[5].startsWith("rules=")) {
             return ComputerStatus.offline();
         }
 
         String hostVersion = fields[2].substring("host=".length());
-        String rulesText = fields[3].substring("rules=".length());
+        String rulesText = fields[5].substring("rules=".length());
         if (hostVersion.isEmpty() || rulesText.isEmpty()) {
             return ComputerStatus.offline();
         }

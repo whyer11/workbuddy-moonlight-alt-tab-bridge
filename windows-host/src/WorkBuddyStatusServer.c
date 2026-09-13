@@ -7,7 +7,7 @@
 
 static DWORD WINAPI status_server_thread(void *context) {
     struct wb_status_server *server = (struct wb_status_server *)context;
-    char request[256];
+    char request[WB_SCHEMA_MAX_DATAGRAM_BYTES + 1];
 
     while (WaitForSingleObject(server->stop_event, 0) == WAIT_TIMEOUT) {
         struct sockaddr_in sender;
@@ -24,6 +24,9 @@ static DWORD WINAPI status_server_thread(void *context) {
             }
             continue;
         }
+        if (received > WB_SCHEMA_MAX_DATAGRAM_BYTES) {
+            continue;
+        }
 
         char nonce[WB_STATUS_NONCE_HEX_LENGTH + 1];
         if (!wb_status_parse_request(request, (size_t)received,
@@ -31,7 +34,7 @@ static DWORD WINAPI status_server_thread(void *context) {
             continue;
         }
 
-        char response[160];
+        char response[WB_SCHEMA_MAX_DATAGRAM_BYTES];
         int response_length = wb_status_format_response(
                 response, sizeof(response), nonce);
         if (response_length > 0) {

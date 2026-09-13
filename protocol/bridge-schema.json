@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": 2,
+  "productVersion": "0.7.0",
+  "statusPort": 57420,
+  "nonceHexLength": 32,
+  "maxDatagramBytes": 512,
+  "rules": [
+    {"id":"alt_tab","title":"Alt+Tab 窗口切换","padInput":"Alt+Tab","padOutput":"Alt+F12","windowsAction":"Windows Alt+Tab","pad":true,"windows":true},
+    {"id":"windows_key","title":"Command 作为 Windows 键","padInput":"Command / Left Meta","padOutput":"Scroll Lock","windowsAction":"左 Windows 键","pad":true,"windows":true},
+    {"id":"arrow_keys","title":"方向键兼容修复","padInput":"上 / 下 / 左 / 右","padOutput":"原键值直通","windowsAction":"Windows 方向键","pad":true,"windows":false}
+  ]
+}

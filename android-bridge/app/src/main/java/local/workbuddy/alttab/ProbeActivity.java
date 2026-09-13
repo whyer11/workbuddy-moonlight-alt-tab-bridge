@@ -20,44 +20,37 @@ import android.widget.Toast;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import local.workbuddy.alttab.adapters.SharedPreferencesComputerHostSettings;
+import local.workbuddy.alttab.adapters.ShizukuPadBridgeMonitor;
+import local.workbuddy.alttab.adapters.UdpComputerBridgeMonitor;
+import local.workbuddy.alttab.application.DashboardCoordinator;
+import local.workbuddy.alttab.domain.DashboardState;
+import local.workbuddy.alttab.domain.EndpointState;
 
 public final class ProbeActivity extends Activity {
-    private static final long REFRESH_INTERVAL_MILLIS = 2000;
-    private static final int COMPUTER_TIMEOUT_MILLIS = 800;
-
     private final Map<String, RuleCardViews> ruleCards = new LinkedHashMap<>();
     private Handler handler;
-    private ExecutorService statusExecutor;
-    private ComputerHostStore hostStore;
-    private ComputerStatusClient computerStatusClient;
+    private DashboardCoordinator coordinator;
     private TextView overallStatus;
     private TextView bridgeStatus;
     private TextView versionStatus;
     private EditText computerHost;
-    private boolean resumed;
-    private volatile int refreshGeneration;
-
-    private final Runnable scheduledRefresh = new Runnable() {
-        @Override
-        public void run() {
-            refreshDashboard();
-        }
-    };
+    private Button activeToggle;
+    private boolean bridgeActive = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         BridgeController.initialize(this);
         handler = new Handler(Looper.getMainLooper());
-        statusExecutor = Executors.newSingleThreadExecutor();
-        hostStore = new ComputerHostStore(this);
-        computerStatusClient = new ComputerStatusClient();
+        SharedPreferencesComputerHostSettings hostSettings =
+                new SharedPreferencesComputerHostSettings(this);
+        coordinator = new DashboardCoordinator(new ShizukuPadBridgeMonitor(),
+                new UdpComputerBridgeMonitor(), hostSettings, command -> handler.post(command));
 
         String deployedHost = getIntent().getStringExtra("computerHost");
         if (deployedHost != null && !deployedHost.trim().isEmpty()) {
-            hostStore.set(deployedHost);
+            hostSettings.set(deployedHost);
         }
 
         setContentView(createContentView());
@@ -66,23 +59,18 @@ public final class ProbeActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        resumed = true;
-        handler.removeCallbacks(scheduledRefresh);
-        refreshDashboard();
+        coordinator.start(this::renderDashboard);
     }
 
     @Override
     protected void onPause() {
-        resumed = false;
-        refreshGeneration++;
-        handler.removeCallbacks(scheduledRefresh);
+        coordinator.stop();
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
-        handler.removeCallbacks(scheduledRefresh);
-        statusExecutor.shutdownNow();
+        coordinator.close();
         super.onDestroy();
     }
 
@@ -130,6 +118,18 @@ public final class ProbeActivity extends Activity {
         });
         root.addView(start, matchWrapWithBottomMargin(22));
 
+        activeToggle = new Button(this);
+        activeToggle.setText(R.string.pause_bridge);
+        activeToggle.setAllCaps(false);
+        activeToggle.setOnClickListener(view -> {
+            boolean requested = !bridgeActive;
+            if (coordinator.setBridgeActive(requested)) {
+                bridgeActive = requested;
+                activeToggle.setText(requested ? R.string.pause_bridge : R.string.resume_bridge);
+            }
+        });
+        root.addView(activeToggle, matchWrapWithBottomMargin(22));
+
         TextView computerTitle = text(getString(R.string.computer_status_title),
                 20, Color.rgb(23, 32, 51));
         computerTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -140,7 +140,7 @@ public final class ProbeActivity extends Activity {
         hostRow.setGravity(Gravity.CENTER_VERTICAL);
         computerHost = new EditText(this);
         computerHost.setSingleLine(true);
-        computerHost.setText(hostStore.get());
+        computerHost.setText(coordinator.host());
         computerHost.setHint(R.string.computer_host_hint);
         computerHost.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         computerHost.setImeOptions(EditorInfo.IME_ACTION_DONE);
@@ -153,11 +153,11 @@ public final class ProbeActivity extends Activity {
         saveHost.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                hostStore.set(computerHost.getText().toString());
-                computerHost.setText(hostStore.get());
+                coordinator.setHost(computerHost.getText().toString());
+                computerHost.setText(coordinator.host());
                 Toast.makeText(ProbeActivity.this,
                         R.string.computer_host_saved, Toast.LENGTH_SHORT).show();
-                requestImmediateRefresh();
+                coordinator.refreshNow();
             }
         });
         hostRow.addView(saveHost);
@@ -220,78 +220,48 @@ public final class ProbeActivity extends Activity {
     }
 
     private void requestImmediateRefresh() {
-        handler.removeCallbacks(scheduledRefresh);
-        refreshGeneration++;
-        refreshDashboard();
-    }
-
-    private void refreshDashboard() {
-        if (!resumed) {
-            return;
-        }
-        final int generation = ++refreshGeneration;
         bridgeStatus.setText(BridgeController.statusText());
-        final String host = hostStore.get();
-
-        statusExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                PadBridgeSnapshot pad = BridgeController.padSnapshot();
-                ComputerStatus computer = computerStatusClient.probe(
-                        host, COMPUTER_TIMEOUT_MILLIS);
-                BridgeDashboardState state = BridgeDashboardState.evaluate(
-                        pad.running(), computer.reachable(), computer.ruleIds());
-                final BridgeDashboardPresenter.DashboardView dashboard =
-                        BridgeDashboardPresenter.render(
-                                state, BuildConfig.VERSION_NAME,
-                                pad.protocolVersion(), computer.hostVersion());
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (!resumed || generation != refreshGeneration || isDestroyed()) {
-                            return;
-                        }
-                        renderDashboard(dashboard);
-                        bridgeStatus.setText(BridgeController.statusText());
-                        handler.postDelayed(scheduledRefresh, REFRESH_INTERVAL_MILLIS);
-                    }
-                });
-            }
-        });
+        coordinator.refreshNow();
     }
 
-    private void renderDashboard(BridgeDashboardPresenter.DashboardView dashboard) {
-        overallStatus.setText(dashboard.overallText());
-        int overallColor;
-        if (dashboard.overallStatus() == BridgeDashboardState.OverallStatus.HEALTHY) {
-            overallColor = Color.rgb(26, 127, 80);
-        } else if (dashboard.overallStatus() == BridgeDashboardState.OverallStatus.PAD_ERROR) {
-            overallColor = Color.rgb(180, 57, 57);
-        } else {
-            overallColor = Color.rgb(184, 117, 25);
-        }
+    private void renderDashboard(DashboardState dashboard) {
+        boolean healthy = dashboard.overall() == DashboardState.Overall.HEALTHY;
+        overallStatus.setText(healthy ? "全链路正常" : "桥接链路异常");
+        int overallColor = healthy ? Color.rgb(26, 127, 80) : Color.rgb(184, 117, 25);
         setRoundedBackground(overallStatus, overallColor, 16);
 
-        for (BridgeDashboardPresenter.RuleView rule : dashboard.rules()) {
+        for (DashboardState.RuleState rule : dashboard.rules()) {
             RuleCardViews views = ruleCards.get(rule.id());
             if (views == null) {
                 continue;
             }
-            setBadge(views.configured, rule.configuredText(), Color.rgb(26, 127, 80));
-            setBadge(views.pad, rule.padText(), rule.padRunning()
-                    ? Color.rgb(26, 127, 80) : Color.rgb(180, 57, 57));
-            int computerColor;
-            if (rule.computerState() == BridgeDashboardState.ComputerState.ONLINE) {
-                computerColor = Color.rgb(26, 127, 80);
-            } else if (rule.computerState()
-                    == BridgeDashboardState.ComputerState.NOT_REQUIRED) {
-                computerColor = Color.rgb(69, 92, 122);
-            } else {
-                computerColor = Color.rgb(184, 117, 25);
-            }
-            setBadge(views.computer, rule.computerText(), computerColor);
+            setBadge(views.configured, "已配置", Color.rgb(26, 127, 80));
+            setBadge(views.pad, endpointText("Pad", rule.pad()), endpointColor(rule.pad()));
+            setBadge(views.computer, endpointText("电脑", rule.computer()),
+                    endpointColor(rule.computer()));
         }
-        versionStatus.setText(dashboard.versionText());
+        String padVersion = dashboard.padEndpoint().productVersion().isEmpty()
+                ? "未知" : dashboard.padEndpoint().productVersion();
+        String hostVersion = dashboard.computerEndpoint().productVersion().isEmpty()
+                ? "离线" : dashboard.computerEndpoint().productVersion();
+        versionStatus.setText("App " + BuildConfig.VERSION_NAME + " · Pad "
+                + padVersion + " · Windows Host " + hostVersion);
+        bridgeStatus.setText(BridgeController.statusText());
+    }
+
+    private static String endpointText(String endpoint, EndpointState state) {
+        if (state == EndpointState.READY) return endpoint + "端运行中";
+        if (state == EndpointState.NOT_REQUIRED) return endpoint + "端无需桥接";
+        if (state == EndpointState.UNSUPPORTED) return endpoint + "端不支持";
+        if (state == EndpointState.OFFLINE) return endpoint + "端离线";
+        return endpoint + "端状态未知";
+    }
+
+    private static int endpointColor(EndpointState state) {
+        if (state == EndpointState.READY) return Color.rgb(26, 127, 80);
+        if (state == EndpointState.NOT_REQUIRED) return Color.rgb(69, 92, 122);
+        if (state == EndpointState.UNSUPPORTED) return Color.rgb(180, 57, 57);
+        return Color.rgb(184, 117, 25);
     }
 
     private TextView text(String value, int sizeSp, int color) {
@@ -315,10 +285,11 @@ public final class ProbeActivity extends Activity {
     }
 
     private void setRoundedBackground(View view, int color, int radiusDp) {
-        GradientDrawable background = new GradientDrawable();
+        GradientDrawable background = view.getBackground() instanceof GradientDrawable
+                ? (GradientDrawable) view.getBackground() : new GradientDrawable();
         background.setColor(color);
         background.setCornerRadius(dp(radiusDp));
-        view.setBackground(background);
+        if (view.getBackground() != background) view.setBackground(background);
     }
 
     private LinearLayout.LayoutParams matchWrapWithBottomMargin(int marginDp) {

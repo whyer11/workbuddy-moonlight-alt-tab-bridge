@@ -37,14 +37,14 @@ static void test_valid_request_gets_status_and_control_request_gets_nothing(void
 
     SOCKET client = make_client(400);
     char response[160] = {0};
-    const char *request = "WB_STATUS_V1 00112233445566778899aabbccddeeff";
+    const char *request = "WB_STATUS_V2 nonce=00112233445566778899aabbccddeeff";
     int received = exchange(client, wb_status_server_port(&server),
             request, response, (int)sizeof(response) - 1);
     assert(received > 0);
     response[received] = '\0';
     assert(strcmp(response,
-            "WB_STATUS_V1 00112233445566778899aabbccddeeff "
-            "host=0.6.0 rules=alt_tab,windows_key") == 0);
+            "WB_STATUS_V2 nonce=00112233445566778899aabbccddeeff "
+            "host=0.7.0 protocol=2 core=ready rules=alt_tab,windows_key") == 0);
 
     const char *control = "RUN_KEY 00112233445566778899aabbccddeeff";
     received = exchange(client, wb_status_server_port(&server),

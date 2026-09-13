@@ -8,6 +8,9 @@ import android.os.IBinder;
 import android.os.Parcel;
 import android.util.Log;
 
+import local.workbuddy.alttab.domain.BridgeEndpointSnapshot;
+import local.workbuddy.alttab.shizuku.BridgeBinderProtocolV2;
+
 import rikka.shizuku.Shizuku;
 
 public final class BridgeController {
@@ -24,7 +27,7 @@ public final class BridgeController {
                     .daemon(true)
                     .processNameSuffix("bridge")
                     .debuggable(false)
-                    .version(8);
+                    .version(9);
 
     private static final ServiceConnection CONNECTION = new ServiceConnection() {
         @Override
@@ -123,23 +126,49 @@ public final class BridgeController {
         return "状态：已授权，等待启动";
     }
 
-    public static PadBridgeSnapshot padSnapshot() {
+    public static BridgeEndpointSnapshot endpointSnapshot() {
         IBinder binder = bridgeBinder;
         if (!connected || binder == null || !binder.isBinderAlive()) {
-            return PadBridgeSnapshot.offline();
+            return BridgeEndpointSnapshot.offline("binder-offline");
         }
 
         Parcel data = Parcel.obtain();
         Parcel reply = Parcel.obtain();
         try {
-            if (!binder.transact(BridgeServiceProtocol.TRANSACTION_STATUS, data, reply, 0)) {
-                return PadBridgeSnapshot.offline();
+            data.writeInterfaceToken(BridgeBinderProtocolV2.DESCRIPTOR);
+            if (!binder.transact(BridgeBinderProtocolV2.TRANSACTION_STATUS, data, reply, 0)) {
+                return BridgeEndpointSnapshot.unknown("transaction-failed");
             }
             reply.readException();
-            return BridgeServiceProtocol.readStatus(reply);
+            BridgeBinderProtocolV2.Snapshot status = BridgeBinderProtocolV2.readStatus(reply);
+            return status.ready
+                    ? BridgeEndpointSnapshot.ready(status.version, status.protocol, status.ruleIds)
+                    : BridgeEndpointSnapshot.unknown(status.errorCode);
         } catch (Throwable error) {
             Log.w(TAG, "Cannot read native bridge status", error);
-            return PadBridgeSnapshot.offline();
+            return BridgeEndpointSnapshot.unknown("binder-exception");
+        } finally {
+            reply.recycle();
+            data.recycle();
+        }
+    }
+
+    public static boolean setActive(boolean active) {
+        IBinder binder = bridgeBinder;
+        if (!connected || binder == null || !binder.isBinderAlive()) return false;
+        Parcel data = Parcel.obtain();
+        Parcel reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(BridgeBinderProtocolV2.DESCRIPTOR);
+            data.writeInt(active ? 1 : 0);
+            if (!binder.transact(BridgeBinderProtocolV2.TRANSACTION_SET_ACTIVE, data, reply, 0)) {
+                return false;
+            }
+            reply.readException();
+            return true;
+        } catch (Throwable error) {
+            Log.w(TAG, "Cannot change native bridge state", error);
+            return false;
         } finally {
             reply.recycle();
             data.recycle();

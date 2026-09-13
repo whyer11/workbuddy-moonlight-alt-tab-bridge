@@ -1,4 +1,5 @@
 #include "key_remap.h"
+#include "native_protocol.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -99,6 +100,19 @@ int main(int argc, char **argv) {
     signal(SIGINT, request_stop);
     signal(SIGTERM, request_stop);
 
+    if (argc == 2 && strcmp(argv[1], "--describe") == 0) {
+        char description[256];
+        if (wb_native_write_description(description, sizeof(description)) < 0) {
+            return 9;
+        }
+        puts(description);
+        return 0;
+    }
+    if (argc > 2 || (argc == 2 && argv[1][0] == '-')) {
+        fprintf(stderr, "USAGE: %s [--describe|/dev/input/eventN]\n", argv[0]);
+        return 9;
+    }
+
     char detected_path[64] = {0};
     const char *physical_path = NULL;
     int physical_fd = -1;
@@ -139,8 +153,16 @@ int main(int argc, char **argv) {
         return 5;
     }
 
-    printf("BRIDGE_READY physical=%s remap=ALT+TAB->ALT+F12,META->SCROLLLOCK\n",
-            physical_path);
+    char ready_line[256];
+    if (wb_native_write_ready(ready_line, sizeof(ready_line), physical_path) < 0) {
+        fprintf(stderr, "READY_FORMAT_FAILED\n");
+        ioctl(physical_fd, EVIOCGRAB, 0);
+        ioctl(virtual_fd, UI_DEV_DESTROY);
+        close(virtual_fd);
+        close(physical_fd);
+        return 10;
+    }
+    puts(ready_line);
 
     struct key_remap_state remap_state = {0};
     struct input_event pending_scan;
