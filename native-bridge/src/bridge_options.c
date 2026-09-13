@@ -17,6 +17,8 @@ void wb_bridge_options_init(struct wb_bridge_options *options) {
             WB_SCHEMA_THREE_FINGER_SPEED_PERCENT_DEFAULT;
     options->three_finger_continuation_ms =
             WB_SCHEMA_THREE_FINGER_CONTINUATION_MS_DEFAULT;
+    options->three_finger_reacquire_ms =
+            WB_SCHEMA_THREE_FINGER_REACQUIRE_MS_DEFAULT;
 }
 
 static int parse_integer(const char *text, int minimum, int maximum, int *result) {
@@ -47,6 +49,7 @@ int wb_bridge_options_parse(struct wb_bridge_options *options,
 
     bool saw_speed = false;
     bool saw_continuation = false;
+    bool saw_reacquire = false;
     for (int index = 1; index < argc; ++index) {
         const char *argument = argv[index];
         if (strcmp(argument, "--three-finger-speed-percent") == 0) {
@@ -69,6 +72,16 @@ int wb_bridge_options_parse(struct wb_bridge_options *options,
                 return -1;
             }
             saw_continuation = true;
+        } else if (strcmp(argument, "--three-finger-reacquire-ms") == 0) {
+            if (saw_reacquire || ++index >= argc
+                    || parse_integer(argv[index],
+                            WB_SCHEMA_THREE_FINGER_REACQUIRE_MS_MIN,
+                            WB_SCHEMA_THREE_FINGER_REACQUIRE_MS_MAX,
+                            &options->three_finger_reacquire_ms) != 0) {
+                errno = EINVAL;
+                return -1;
+            }
+            saw_reacquire = true;
         } else if (argument[0] == '-' || options->keyboard_path != NULL) {
             errno = EINVAL;
             return -1;

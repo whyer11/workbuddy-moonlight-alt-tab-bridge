@@ -37,12 +37,13 @@ public final class NativeBridgeSupervisor implements AutoCloseable {
         return Arrays.asList(
                 executable,
                 "--three-finger-speed-percent", String.valueOf(config.speedPercent()),
-                "--three-finger-continuation-ms", String.valueOf(config.continuationMs()));
+                "--three-finger-continuation-ms", String.valueOf(config.continuationMs()),
+                "--three-finger-reacquire-ms", String.valueOf(config.reacquireMs()));
     }
 
     public void setGestureConfig(GestureConfig value) {
         GestureConfig next = GestureConfig.normalized(
-                value.speedPercent(), value.continuationMs());
+                value.speedPercent(), value.continuationMs(), value.reacquireMs());
         GestureConfig previous = gestureConfig.getAndSet(next);
         if (previous.equals(next)) {
             return;

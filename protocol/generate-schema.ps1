@@ -51,6 +51,10 @@ public final class GeneratedBridgeSchema {
     public static final int THREE_FINGER_CONTINUATION_MS_MIN = $($schema.gestureSettings.threeFingerContinuationMs.min);
     public static final int THREE_FINGER_CONTINUATION_MS_MAX = $($schema.gestureSettings.threeFingerContinuationMs.max);
     public static final int THREE_FINGER_CONTINUATION_MS_STEP = $($schema.gestureSettings.threeFingerContinuationMs.step);
+    public static final int THREE_FINGER_REACQUIRE_MS_DEFAULT = $($schema.gestureSettings.threeFingerReacquireMs.default);
+    public static final int THREE_FINGER_REACQUIRE_MS_MIN = $($schema.gestureSettings.threeFingerReacquireMs.min);
+    public static final int THREE_FINGER_REACQUIRE_MS_MAX = $($schema.gestureSettings.threeFingerReacquireMs.max);
+    public static final int THREE_FINGER_REACQUIRE_MS_STEP = $($schema.gestureSettings.threeFingerReacquireMs.step);
 
     public static final List<RuleDefinition> RULES = Collections.unmodifiableList(Arrays.asList(
 $javaRuleList
@@ -101,6 +105,10 @@ $header = @"
 #define WB_SCHEMA_THREE_FINGER_CONTINUATION_MS_MIN $($schema.gestureSettings.threeFingerContinuationMs.min)
 #define WB_SCHEMA_THREE_FINGER_CONTINUATION_MS_MAX $($schema.gestureSettings.threeFingerContinuationMs.max)
 #define WB_SCHEMA_THREE_FINGER_CONTINUATION_MS_STEP $($schema.gestureSettings.threeFingerContinuationMs.step)
+#define WB_SCHEMA_THREE_FINGER_REACQUIRE_MS_DEFAULT $($schema.gestureSettings.threeFingerReacquireMs.default)
+#define WB_SCHEMA_THREE_FINGER_REACQUIRE_MS_MIN $($schema.gestureSettings.threeFingerReacquireMs.min)
+#define WB_SCHEMA_THREE_FINGER_REACQUIRE_MS_MAX $($schema.gestureSettings.threeFingerReacquireMs.max)
+#define WB_SCHEMA_THREE_FINGER_REACQUIRE_MS_STEP $($schema.gestureSettings.threeFingerReacquireMs.step)
 #define WB_SCHEMA_PAD_RULES "$(Escape-C $padRules)"
 #define WB_SCHEMA_WINDOWS_RULES "$(Escape-C $windowsRules)"
 

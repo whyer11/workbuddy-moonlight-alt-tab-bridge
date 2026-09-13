@@ -8,7 +8,8 @@ static void assert_parse_ok(int argc,
                             char **argv,
                             const char *path,
                             int speed,
-                            int continuation) {
+                            int continuation,
+                            int reacquire) {
     struct wb_bridge_options options;
     wb_bridge_options_init(&options);
     assert(wb_bridge_options_parse(&options, argc, argv) == 0);
@@ -16,6 +17,7 @@ static void assert_parse_ok(int argc,
             || (path != NULL && strcmp(path, options.keyboard_path) == 0));
     assert(options.three_finger_speed_percent == speed);
     assert(options.three_finger_continuation_ms == continuation);
+    assert(options.three_finger_reacquire_ms == reacquire);
 }
 
 static void assert_parse_fails(int argc, char **argv) {
@@ -26,21 +28,23 @@ static void assert_parse_fails(int argc, char **argv) {
 
 static void test_defaults(void) {
     char *argv[] = {"bridge"};
-    assert_parse_ok(1, argv, NULL, 25, 1000);
+    assert_parse_ok(1, argv, NULL, 25, 1000, 150);
 }
 
 static void test_values_and_path_in_any_order(void) {
     char *first[] = {
         "bridge", "--three-finger-speed-percent", "10",
-        "/dev/input/event18", "--three-finger-continuation-ms", "2000"
+        "/dev/input/event18", "--three-finger-continuation-ms", "2000",
+        "--three-finger-reacquire-ms", "500"
     };
-    assert_parse_ok(6, first, "/dev/input/event18", 10, 2000);
+    assert_parse_ok(8, first, "/dev/input/event18", 10, 2000, 500);
 
     char *second[] = {
         "bridge", "--three-finger-continuation-ms", "0",
-        "--three-finger-speed-percent", "100"
+        "--three-finger-speed-percent", "100",
+        "--three-finger-reacquire-ms", "0"
     };
-    assert_parse_ok(5, second, NULL, 100, 0);
+    assert_parse_ok(7, second, NULL, 100, 0, 0);
 }
 
 static void test_invalid_values_fail(void) {
@@ -48,11 +52,15 @@ static void test_invalid_values_fail(void) {
     char *speed_high[] = {"bridge", "--three-finger-speed-percent", "101"};
     char *continuation_low[] = {"bridge", "--three-finger-continuation-ms", "-1"};
     char *continuation_high[] = {"bridge", "--three-finger-continuation-ms", "2001"};
+    char *reacquire_low[] = {"bridge", "--three-finger-reacquire-ms", "-1"};
+    char *reacquire_high[] = {"bridge", "--three-finger-reacquire-ms", "501"};
     char *not_integer[] = {"bridge", "--three-finger-speed-percent", "25x"};
     assert_parse_fails(3, speed_low);
     assert_parse_fails(3, speed_high);
     assert_parse_fails(3, continuation_low);
     assert_parse_fails(3, continuation_high);
+    assert_parse_fails(3, reacquire_low);
+    assert_parse_fails(3, reacquire_high);
     assert_parse_fails(3, not_integer);
 }
 

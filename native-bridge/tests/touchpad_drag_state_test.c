@@ -8,6 +8,7 @@ static const struct wb_touchpad_drag_config TEST_CONFIG = {
     .movement_numerator = 25,
     .movement_denominator = 100,
     .continuation_ms = 1000,
+    .reacquire_ms = 150,
 };
 
 static void begin_contact(struct wb_touchpad_drag_state *state,
@@ -170,8 +171,9 @@ static void test_new_single_contact_after_empty_grace_releases_immediately(void)
     end_contact(&state, 2);
     assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
     begin_contact(&state, 0, 200, 400, 400);
-    assert_output(wb_touchpad_drag_finish_frame(&state, 300),
-                  WB_DRAG_LEFT_UP, 0, 0);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300), WB_DRAG_NONE, 0, 0);
+    assert_output(wb_touchpad_drag_tick(&state, 449), WB_DRAG_NONE, 0, 0);
+    assert_output(wb_touchpad_drag_tick(&state, 450), WB_DRAG_LEFT_UP, 0, 0);
     assert(state.phase == WB_TOUCHPAD_IDLE);
 }
 
@@ -184,8 +186,8 @@ static void test_new_two_contacts_after_empty_grace_release_immediately(void) {
     assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
     begin_contact(&state, 0, 200, 400, 400);
     begin_contact(&state, 1, 201, 700, 400);
-    assert_output(wb_touchpad_drag_finish_frame(&state, 300),
-                  WB_DRAG_LEFT_UP, 0, 0);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300), WB_DRAG_NONE, 0, 0);
+    assert_output(wb_touchpad_drag_tick(&state, 450), WB_DRAG_LEFT_UP, 0, 0);
 }
 
 static void test_two_finger_motion_during_grace_releases_immediately(void) {
@@ -225,6 +227,55 @@ static void test_three_contacts_after_empty_grace_resume_without_second_down(voi
     assert(state.button_down);
 }
 
+static void test_staggered_three_contact_reacquire_resumes_within_tolerance(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 0);
+    end_contact(&state, 1);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    begin_contact(&state, 0, 200, 400, 400);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300), WB_DRAG_NONE, 0, 0);
+    begin_contact(&state, 1, 201, 700, 400);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 350), WB_DRAG_NONE, 0, 0);
+    begin_contact(&state, 2, 202, 1000, 400);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 449), WB_DRAG_NONE, 0, 0);
+    assert(state.phase == WB_TOUCHPAD_DRAGGING);
+    assert(state.button_down);
+}
+
+static void test_zero_reacquire_tolerance_preserves_strict_mode(void) {
+    struct wb_touchpad_drag_state state;
+    struct wb_touchpad_drag_config strict = TEST_CONFIG;
+    strict.reacquire_ms = 0;
+    wb_touchpad_drag_init(&state, strict);
+    begin_three_contacts(&state, 0, 0);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 0), WB_DRAG_NONE, 0, 0);
+    move_three_contacts(&state, 48, 0);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 100),
+                  WB_DRAG_LEFT_DOWN | WB_DRAG_MOVE, 12, 0);
+    end_contact(&state, 0);
+    end_contact(&state, 1);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    begin_contact(&state, 0, 200, 400, 400);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300),
+                  WB_DRAG_LEFT_UP, 0, 0);
+}
+
+static void test_reacquire_timeout_never_extends_continuation_deadline(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 0);
+    end_contact(&state, 1);
+    end_contact(&state, 2);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
+    begin_contact(&state, 0, 200, 400, 400);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 1190), WB_DRAG_NONE, 0, 0);
+    assert(wb_touchpad_drag_next_timeout_ms(&state, 1190, 500) == 10);
+    assert_output(wb_touchpad_drag_tick(&state, 1200), WB_DRAG_LEFT_UP, 0, 0);
+}
+
 static void test_invalid_grace_input_releases_only_once(void) {
     struct wb_touchpad_drag_state state;
     start_drag(&state);
@@ -233,8 +284,8 @@ static void test_invalid_grace_input_releases_only_once(void) {
     end_contact(&state, 2);
     assert_output(wb_touchpad_drag_finish_frame(&state, 200), WB_DRAG_NONE, 0, 0);
     begin_contact(&state, 0, 200, 400, 400);
-    assert_output(wb_touchpad_drag_finish_frame(&state, 300),
-                  WB_DRAG_LEFT_UP, 0, 0);
+    assert_output(wb_touchpad_drag_finish_frame(&state, 300), WB_DRAG_NONE, 0, 0);
+    assert_output(wb_touchpad_drag_tick(&state, 450), WB_DRAG_LEFT_UP, 0, 0);
     assert_output(wb_touchpad_drag_tick(&state, 1800), WB_DRAG_NONE, 0, 0);
 }
 
@@ -317,6 +368,9 @@ int main(void) {
     test_two_finger_motion_during_grace_releases_immediately();
     test_staggered_lift_without_new_input_preserves_grace();
     test_three_contacts_after_empty_grace_resume_without_second_down();
+    test_staggered_three_contact_reacquire_resumes_within_tolerance();
+    test_zero_reacquire_tolerance_preserves_strict_mode();
+    test_reacquire_timeout_never_extends_continuation_deadline();
     test_invalid_grace_input_releases_only_once();
     test_tick_at_1000ms_releases_exactly_once();
     test_resume_at_1000ms_releases_then_arms_new_drag();

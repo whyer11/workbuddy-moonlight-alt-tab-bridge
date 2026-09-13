@@ -126,6 +126,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "USAGE: %s [--describe] "
                 "[--three-finger-speed-percent N] "
                 "[--three-finger-continuation-ms N] "
+                "[--three-finger-reacquire-ms N] "
                 "[/dev/input/eventN]\n", argv[0]);
         return 9;
     }
@@ -172,6 +173,7 @@ int main(int argc, char **argv) {
         .movement_numerator = options.three_finger_speed_percent,
         .movement_denominator = 100,
         .continuation_ms = options.three_finger_continuation_ms,
+        .reacquire_ms = options.three_finger_reacquire_ms,
     };
     if (wb_touchpad_bridge_open(&touchpad, drag_config) != 0) {
         fprintf(stderr, "TOUCHPAD_OPEN_FAILED errno=%d message=%s\n",
@@ -180,10 +182,11 @@ int main(int argc, char **argv) {
         goto cleanup;
     }
     printf("TOUCHPAD_READY physical=%s virtual=WorkBuddy_Virtual_Mouse "
-            "threshold=48 speed=%d%% continuation=%dms\n",
+            "threshold=48 speed=%d%% continuation=%dms reacquire=%dms\n",
             wb_touchpad_bridge_path(&touchpad),
             options.three_finger_speed_percent,
-            options.three_finger_continuation_ms);
+            options.three_finger_continuation_ms,
+            options.three_finger_reacquire_ms);
 
     usleep(350000);
     if (ioctl(physical_fd, EVIOCGRAB, 1) != 0) {

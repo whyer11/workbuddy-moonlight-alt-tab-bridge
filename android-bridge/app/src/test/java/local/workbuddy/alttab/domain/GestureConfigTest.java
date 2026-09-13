@@ -12,25 +12,29 @@ public final class GestureConfigTest {
 
         assertEquals(25, config.speedPercent());
         assertEquals(1000, config.continuationMs());
+        assertEquals(150, config.reacquireMs());
     }
 
     @Test
     public void outOfRangeValuesAreClampedAndSnapped() {
-        GestureConfig low = GestureConfig.normalized(7, -1);
-        GestureConfig high = GestureConfig.normalized(103, 2100);
+        GestureConfig low = GestureConfig.normalized(7, -1, -1);
+        GestureConfig high = GestureConfig.normalized(103, 2100, 501);
 
         assertEquals(10, low.speedPercent());
         assertEquals(0, low.continuationMs());
         assertEquals(100, high.speedPercent());
         assertEquals(2000, high.continuationMs());
+        assertEquals(0, low.reacquireMs());
+        assertEquals(500, high.reacquireMs());
     }
 
     @Test
     public void inRangeValuesSnapToNearestSupportedStep() {
-        GestureConfig config = GestureConfig.normalized(28, 1049);
+        GestureConfig config = GestureConfig.normalized(28, 1049, 149);
 
         assertEquals(30, config.speedPercent());
         assertEquals(1000, config.continuationMs());
+        assertEquals(149, config.reacquireMs());
     }
 
     @Test
@@ -38,6 +42,7 @@ public final class GestureConfigTest {
         GestureConfig original = GestureConfig.defaults();
         GestureConfig faster = original.withSpeedPercent(40);
         GestureConfig longer = original.withContinuationMs(1500);
+        GestureConfig moreTolerant = original.withReacquireMs(237);
 
         assertEquals(25, original.speedPercent());
         assertEquals(1000, original.continuationMs());
@@ -45,18 +50,22 @@ public final class GestureConfigTest {
         assertEquals(1000, faster.continuationMs());
         assertEquals(25, longer.speedPercent());
         assertEquals(1500, longer.continuationMs());
+        assertEquals(150, original.reacquireMs());
+        assertEquals(237, moreTolerant.reacquireMs());
     }
 
     @Test
     public void equalityDependsOnBothSettings() {
-        GestureConfig first = GestureConfig.normalized(25, 1000);
-        GestureConfig same = GestureConfig.normalized(25, 1000);
-        GestureConfig differentSpeed = GestureConfig.normalized(30, 1000);
-        GestureConfig differentContinuation = GestureConfig.normalized(25, 900);
+        GestureConfig first = GestureConfig.normalized(25, 1000, 150);
+        GestureConfig same = GestureConfig.normalized(25, 1000, 150);
+        GestureConfig differentSpeed = GestureConfig.normalized(30, 1000, 150);
+        GestureConfig differentContinuation = GestureConfig.normalized(25, 900, 150);
+        GestureConfig differentReacquire = GestureConfig.normalized(25, 1000, 151);
 
         assertEquals(first, same);
         assertEquals(first.hashCode(), same.hashCode());
         assertNotEquals(first, differentSpeed);
         assertNotEquals(first, differentContinuation);
+        assertNotEquals(first, differentReacquire);
     }
 }

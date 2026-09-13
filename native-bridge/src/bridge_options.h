@@ -5,6 +5,7 @@ struct wb_bridge_options {
     const char *keyboard_path;
     int three_finger_speed_percent;
     int three_finger_continuation_ms;
+    int three_finger_reacquire_ms;
 };
 
 void wb_bridge_options_init(struct wb_bridge_options *options);

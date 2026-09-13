@@ -7,19 +7,23 @@ import local.workbuddy.alttab.generated.GeneratedBridgeSchema;
 public final class GestureConfig {
     private final int speedPercent;
     private final int continuationMs;
+    private final int reacquireMs;
 
-    private GestureConfig(int speedPercent, int continuationMs) {
+    private GestureConfig(int speedPercent, int continuationMs, int reacquireMs) {
         this.speedPercent = speedPercent;
         this.continuationMs = continuationMs;
+        this.reacquireMs = reacquireMs;
     }
 
     public static GestureConfig defaults() {
         return normalized(
                 GeneratedBridgeSchema.THREE_FINGER_SPEED_PERCENT_DEFAULT,
-                GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_DEFAULT);
+                GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_DEFAULT,
+                GeneratedBridgeSchema.THREE_FINGER_REACQUIRE_MS_DEFAULT);
     }
 
-    public static GestureConfig normalized(int speedPercent, int continuationMs) {
+    public static GestureConfig normalized(
+            int speedPercent, int continuationMs, int reacquireMs) {
         return new GestureConfig(
                 snap(speedPercent,
                         GeneratedBridgeSchema.THREE_FINGER_SPEED_PERCENT_MIN,
@@ -28,7 +32,11 @@ public final class GestureConfig {
                 snap(continuationMs,
                         GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_MIN,
                         GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_MAX,
-                        GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_STEP));
+                        GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_STEP),
+                snap(reacquireMs,
+                        GeneratedBridgeSchema.THREE_FINGER_REACQUIRE_MS_MIN,
+                        GeneratedBridgeSchema.THREE_FINGER_REACQUIRE_MS_MAX,
+                        GeneratedBridgeSchema.THREE_FINGER_REACQUIRE_MS_STEP));
     }
 
     private static int snap(int value, int min, int max, int step) {
@@ -45,12 +53,20 @@ public final class GestureConfig {
         return continuationMs;
     }
 
+    public int reacquireMs() {
+        return reacquireMs;
+    }
+
     public GestureConfig withSpeedPercent(int value) {
-        return normalized(value, continuationMs);
+        return normalized(value, continuationMs, reacquireMs);
     }
 
     public GestureConfig withContinuationMs(int value) {
-        return normalized(speedPercent, value);
+        return normalized(speedPercent, value, reacquireMs);
+    }
+
+    public GestureConfig withReacquireMs(int value) {
+        return normalized(speedPercent, continuationMs, value);
     }
 
     @Override
@@ -58,17 +74,20 @@ public final class GestureConfig {
         if (this == other) return true;
         if (!(other instanceof GestureConfig)) return false;
         GestureConfig that = (GestureConfig) other;
-        return speedPercent == that.speedPercent && continuationMs == that.continuationMs;
+        return speedPercent == that.speedPercent
+                && continuationMs == that.continuationMs
+                && reacquireMs == that.reacquireMs;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(speedPercent, continuationMs);
+        return Objects.hash(speedPercent, continuationMs, reacquireMs);
     }
 
     @Override
     public String toString() {
         return "GestureConfig{speedPercent=" + speedPercent
-                + ", continuationMs=" + continuationMs + '}';
+                + ", continuationMs=" + continuationMs
+                + ", reacquireMs=" + reacquireMs + '}';
     }
 }

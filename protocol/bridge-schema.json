@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
   "protocolVersion": 2,
-  "productVersion": "0.9.0",
+  "productVersion": "0.9.1",
   "statusPort": 57420,
   "nonceHexLength": 32,
   "maxDatagramBytes": 512,
   "gestureSettings": {
     "threeFingerSpeedPercent": {"default":25,"min":10,"max":100,"step":5},
-    "threeFingerContinuationMs": {"default":1000,"min":0,"max":2000,"step":100}
+    "threeFingerContinuationMs": {"default":1000,"min":0,"max":2000,"step":100},
+    "threeFingerReacquireMs": {"default":150,"min":0,"max":500,"step":1}
   },
   "rules": [
     {"id":"alt_tab","title":"Alt+Tab 窗口切换","padInput":"Alt+Tab","padOutput":"Alt+F12","windowsAction":"Windows Alt+Tab","pad":true,"windows":true},

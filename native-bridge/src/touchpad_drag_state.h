@@ -18,6 +18,7 @@ struct wb_touchpad_drag_config {
     int movement_numerator;
     int movement_denominator;
     int continuation_ms;
+    int reacquire_ms;
 };
 
 struct wb_touchpad_drag_output {
@@ -51,13 +52,15 @@ struct wb_touchpad_drag_state {
     int last_x;
     int last_y;
     int64_t grace_deadline_ms;
+    int64_t reacquire_deadline_ms;
     long long remainder_x;
     long long remainder_y;
     bool button_down;
     bool composition_changed;
     bool frame_contact_started;
-    bool frame_position_updated;
+    bool frame_existing_contact_moved;
     bool grace_observed_no_contacts;
+    bool reacquire_pending;
     struct wb_touchpad_drag_config config;
 };
 

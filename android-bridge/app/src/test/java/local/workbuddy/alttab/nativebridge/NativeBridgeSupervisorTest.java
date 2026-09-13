@@ -14,7 +14,8 @@ public final class NativeBridgeSupervisorTest {
         assertEquals(Arrays.asList(
                         "/data/local/tmp/alttab_evdev_bridge",
                         "--three-finger-speed-percent", "25",
-                        "--three-finger-continuation-ms", "1000"),
+                        "--three-finger-continuation-ms", "1000",
+                        "--three-finger-reacquire-ms", "150"),
                 NativeBridgeSupervisor.commandFor(
                         "/data/local/tmp/alttab_evdev_bridge",
                         GestureConfig.defaults()));
@@ -25,8 +26,9 @@ public final class NativeBridgeSupervisorTest {
         assertEquals(Arrays.asList(
                         "/bridge",
                         "--three-finger-speed-percent", "40",
-                        "--three-finger-continuation-ms", "500"),
+                        "--three-finger-continuation-ms", "500",
+                        "--three-finger-reacquire-ms", "237"),
                 NativeBridgeSupervisor.commandFor(
-                        "/bridge", GestureConfig.normalized(40, 500)));
+                        "/bridge", GestureConfig.normalized(40, 500, 237)));
     }
 }

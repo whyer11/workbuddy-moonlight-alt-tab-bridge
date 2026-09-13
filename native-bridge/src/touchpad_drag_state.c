@@ -15,9 +15,11 @@ static struct wb_touchpad_drag_output release_output(void) {
 
 static void clear_motion_runtime(struct wb_touchpad_drag_state *state) {
     state->grace_deadline_ms = 0;
+    state->reacquire_deadline_ms = 0;
     state->remainder_x = 0;
     state->remainder_y = 0;
     state->grace_observed_no_contacts = false;
+    state->reacquire_pending = false;
 }
 
 static void enter_idle(struct wb_touchpad_drag_state *state) {
@@ -53,6 +55,9 @@ void wb_touchpad_drag_init(struct wb_touchpad_drag_state *state,
     }
     if (config.continuation_ms < 0) {
         config.continuation_ms = 1000;
+    }
+    if (config.reacquire_ms < 0) {
+        config.reacquire_ms = 150;
     }
     memset(state, 0, sizeof(*state));
     state->selected_slot = 0;
@@ -90,9 +95,11 @@ void wb_touchpad_drag_set_x(struct wb_touchpad_drag_state *state, int x) {
     }
     struct wb_touchpad_slot *slot = &state->slots[state->selected_slot];
     if (slot->active) {
+        if (slot->has_x && slot->x != x) {
+            state->frame_existing_contact_moved = true;
+        }
         slot->x = x;
         slot->has_x = true;
-        state->frame_position_updated = true;
     }
 }
 
@@ -102,9 +109,11 @@ void wb_touchpad_drag_set_y(struct wb_touchpad_drag_state *state, int y) {
     }
     struct wb_touchpad_slot *slot = &state->slots[state->selected_slot];
     if (slot->active) {
+        if (slot->has_y && slot->y != y) {
+            state->frame_existing_contact_moved = true;
+        }
         slot->y = y;
         slot->has_y = true;
-        state->frame_position_updated = true;
     }
 }
 
@@ -150,7 +159,9 @@ static int scale_delta(int delta,
 struct wb_touchpad_drag_output wb_touchpad_drag_tick(
         struct wb_touchpad_drag_state *state, int64_t now_ms) {
     if (state->phase == WB_TOUCHPAD_GRACE
-            && now_ms >= state->grace_deadline_ms) {
+            && (now_ms >= state->grace_deadline_ms
+                || (state->reacquire_pending
+                    && now_ms >= state->reacquire_deadline_ms))) {
         return release_if_pressed(state);
     }
     return no_output();
@@ -167,6 +178,12 @@ int wb_touchpad_drag_next_timeout_ms(
         return fallback_ms;
     }
     int64_t remaining = state->grace_deadline_ms - now_ms;
+    if (state->reacquire_pending) {
+        int64_t reacquire_remaining = state->reacquire_deadline_ms - now_ms;
+        if (reacquire_remaining < remaining) {
+            remaining = reacquire_remaining;
+        }
+    }
     if (remaining <= 0) {
         return 0;
     }
@@ -198,10 +215,10 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
 
     bool composition_changed = state->composition_changed;
     bool contact_started = state->frame_contact_started;
-    bool position_updated = state->frame_position_updated;
+    bool existing_contact_moved = state->frame_existing_contact_moved;
     state->composition_changed = false;
     state->frame_contact_started = false;
-    state->frame_position_updated = false;
+    state->frame_existing_contact_moved = false;
 
     if (active_count >= 4) {
         return release_if_pressed(state);
@@ -227,6 +244,9 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
 
     if (state->phase == WB_TOUCHPAD_GRACE) {
         if (active_count == 0) {
+            if (state->reacquire_pending) {
+                return release_if_pressed(state);
+            }
             state->grace_observed_no_contacts = true;
             return no_output();
         }
@@ -236,9 +256,23 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
         }
         if (!entered_grace_this_frame
                 && active_count < 3
-                && (state->grace_observed_no_contacts
-                    || contact_started
-                    || position_updated)) {
+                && existing_contact_moved) {
+            return release_if_pressed(state);
+        }
+        if (!entered_grace_this_frame
+                && active_count < 3
+                && contact_started
+                && !state->reacquire_pending) {
+            if (state->config.reacquire_ms == 0) {
+                return release_if_pressed(state);
+            }
+            state->reacquire_pending = true;
+            state->reacquire_deadline_ms = now_ms + state->config.reacquire_ms;
+        }
+        if (!entered_grace_this_frame
+                && active_count < 3
+                && state->grace_observed_no_contacts
+                && !state->reacquire_pending) {
             return release_if_pressed(state);
         }
         return no_output();

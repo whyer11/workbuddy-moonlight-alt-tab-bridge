@@ -44,10 +44,11 @@ public final class BridgeBinderProtocolV2 {
     public static void writeGestureConfig(Parcel data, GestureConfig config) {
         data.writeInt(config.speedPercent());
         data.writeInt(config.continuationMs());
+        data.writeInt(config.reacquireMs());
     }
 
     public static GestureConfig readGestureConfig(Parcel data) {
-        return GestureConfig.normalized(data.readInt(), data.readInt());
+        return GestureConfig.normalized(data.readInt(), data.readInt(), data.readInt());
     }
 
     public static final class Snapshot {

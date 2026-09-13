@@ -15,6 +15,7 @@ public final class SharedPreferencesGestureSettingsTest {
 
         assertEquals(25, config.speedPercent());
         assertEquals(1000, config.continuationMs());
+        assertEquals(150, config.reacquireMs());
     }
 
     @Test
@@ -22,11 +23,13 @@ public final class SharedPreferencesGestureSettingsTest {
         FakeStorage storage = new FakeStorage();
         storage.speed = 103;
         storage.continuation = -1;
+        storage.reacquire = 501;
 
         GestureConfig config = new SharedPreferencesGestureSettings(storage).load();
 
         assertEquals(100, config.speedPercent());
         assertEquals(0, config.continuationMs());
+        assertEquals(500, config.reacquireMs());
     }
 
     @Test
@@ -35,10 +38,11 @@ public final class SharedPreferencesGestureSettingsTest {
         SharedPreferencesGestureSettings settings =
                 new SharedPreferencesGestureSettings(storage);
 
-        settings.save(GestureConfig.normalized(28, 1549));
+        settings.save(GestureConfig.normalized(28, 1549, 237));
 
         assertEquals(30, storage.speed);
         assertEquals(1500, storage.continuation);
+        assertEquals(237, storage.reacquire);
         assertEquals(1, storage.saveCount);
     }
 
@@ -46,6 +50,7 @@ public final class SharedPreferencesGestureSettingsTest {
             implements SharedPreferencesGestureSettings.Storage {
         private int speed = Integer.MIN_VALUE;
         private int continuation = Integer.MIN_VALUE;
+        private int reacquire = Integer.MIN_VALUE;
         private int saveCount;
 
         @Override
@@ -59,9 +64,15 @@ public final class SharedPreferencesGestureSettingsTest {
         }
 
         @Override
-        public void save(int speedPercent, int continuationMs) {
+        public int readReacquireMs(int fallback) {
+            return reacquire == Integer.MIN_VALUE ? fallback : reacquire;
+        }
+
+        @Override
+        public void save(int speedPercent, int continuationMs, int reacquireMs) {
             speed = speedPercent;
             continuation = continuationMs;
+            reacquire = reacquireMs;
             saveCount++;
         }
     }

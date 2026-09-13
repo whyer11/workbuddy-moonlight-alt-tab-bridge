@@ -25,6 +25,10 @@ $continuation = $schema.gestureSettings.threeFingerContinuationMs
 if ($null -eq $continuation -or $continuation.default -ne 1000 -or $continuation.min -ne 0 -or $continuation.max -ne 2000 -or $continuation.step -ne 100) {
     throw 'Unexpected three-finger continuation contract.'
 }
+$reacquire = $schema.gestureSettings.threeFingerReacquireMs
+if ($null -eq $reacquire -or $reacquire.default -ne 150 -or $reacquire.min -ne 0 -or $reacquire.max -ne 500 -or $reacquire.step -ne 1) {
+    throw 'Unexpected three-finger reacquire contract.'
+}
 
 $temporary = Join-Path ([System.IO.Path]::GetTempPath()) ("workbuddy-schema-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $temporary | Out-Null

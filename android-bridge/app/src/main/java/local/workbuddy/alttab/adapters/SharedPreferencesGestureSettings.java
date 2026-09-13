@@ -12,11 +12,13 @@ public final class SharedPreferencesGestureSettings implements GestureSettings {
     private static final String PREFERENCES_NAME = "gesture-settings";
     private static final String SPEED_KEY = "three_finger_speed_percent";
     private static final String CONTINUATION_KEY = "three_finger_continuation_ms";
+    private static final String REACQUIRE_KEY = "three_finger_reacquire_ms";
 
     interface Storage {
         int readSpeedPercent(int fallback);
         int readContinuationMs(int fallback);
-        void save(int speedPercent, int continuationMs);
+        int readReacquireMs(int fallback);
+        void save(int speedPercent, int continuationMs, int reacquireMs);
     }
 
     private final Storage storage;
@@ -36,14 +38,16 @@ public final class SharedPreferencesGestureSettings implements GestureSettings {
         GestureConfig defaults = GestureConfig.defaults();
         return GestureConfig.normalized(
                 storage.readSpeedPercent(defaults.speedPercent()),
-                storage.readContinuationMs(defaults.continuationMs()));
+                storage.readContinuationMs(defaults.continuationMs()),
+                storage.readReacquireMs(defaults.reacquireMs()));
     }
 
     @Override
     public void save(GestureConfig config) {
         GestureConfig normalized = GestureConfig.normalized(
-                config.speedPercent(), config.continuationMs());
-        storage.save(normalized.speedPercent(), normalized.continuationMs());
+                config.speedPercent(), config.continuationMs(), config.reacquireMs());
+        storage.save(normalized.speedPercent(), normalized.continuationMs(),
+                normalized.reacquireMs());
     }
 
     private static final class AndroidStorage implements Storage {
@@ -64,10 +68,16 @@ public final class SharedPreferencesGestureSettings implements GestureSettings {
         }
 
         @Override
-        public void save(int speedPercent, int continuationMs) {
+        public int readReacquireMs(int fallback) {
+            return preferences.getInt(REACQUIRE_KEY, fallback);
+        }
+
+        @Override
+        public void save(int speedPercent, int continuationMs, int reacquireMs) {
             preferences.edit()
                     .putInt(SPEED_KEY, speedPercent)
                     .putInt(CONTINUATION_KEY, continuationMs)
+                    .putInt(REACQUIRE_KEY, reacquireMs)
                     .apply();
         }
     }

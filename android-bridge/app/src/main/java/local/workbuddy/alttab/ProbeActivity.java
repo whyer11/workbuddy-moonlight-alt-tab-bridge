@@ -225,6 +225,15 @@ public final class ProbeActivity extends Activity {
                 gestureConfig.continuationMs(),
                 value -> saveGestureConfig(gestureConfig.withContinuationMs(value))));
 
+        card.addView(createSteppedSlider(
+                getString(R.string.three_finger_reacquire),
+                " ms",
+                GeneratedBridgeSchema.THREE_FINGER_REACQUIRE_MS_MIN,
+                GeneratedBridgeSchema.THREE_FINGER_REACQUIRE_MS_MAX,
+                GeneratedBridgeSchema.THREE_FINGER_REACQUIRE_MS_STEP,
+                gestureConfig.reacquireMs(),
+                value -> saveGestureConfig(gestureConfig.withReacquireMs(value))));
+
         TextView help = text(getString(R.string.gesture_moonlight_help),
                 14, Color.rgb(99, 110, 132));
         help.setPadding(0, dp(6), 0, 0);
