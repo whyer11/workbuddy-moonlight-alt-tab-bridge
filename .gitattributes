@@ -1,0 +1,3 @@
+android-bridge/app/src/main/java/local/workbuddy/alttab/generated/GeneratedBridgeSchema.java text eol=lf
+native-bridge/src/generated_bridge_schema.h text eol=lf
+windows-host/src/GeneratedBridgeSchema.h text eol=lf
