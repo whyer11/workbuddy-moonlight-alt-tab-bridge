@@ -43,6 +43,14 @@ public final class GeneratedBridgeSchema {
     public static final int STATUS_PORT = $($schema.statusPort);
     public static final int NONCE_HEX_LENGTH = $($schema.nonceHexLength);
     public static final int MAX_DATAGRAM_BYTES = $($schema.maxDatagramBytes);
+    public static final int THREE_FINGER_SPEED_PERCENT_DEFAULT = $($schema.gestureSettings.threeFingerSpeedPercent.default);
+    public static final int THREE_FINGER_SPEED_PERCENT_MIN = $($schema.gestureSettings.threeFingerSpeedPercent.min);
+    public static final int THREE_FINGER_SPEED_PERCENT_MAX = $($schema.gestureSettings.threeFingerSpeedPercent.max);
+    public static final int THREE_FINGER_SPEED_PERCENT_STEP = $($schema.gestureSettings.threeFingerSpeedPercent.step);
+    public static final int THREE_FINGER_CONTINUATION_MS_DEFAULT = $($schema.gestureSettings.threeFingerContinuationMs.default);
+    public static final int THREE_FINGER_CONTINUATION_MS_MIN = $($schema.gestureSettings.threeFingerContinuationMs.min);
+    public static final int THREE_FINGER_CONTINUATION_MS_MAX = $($schema.gestureSettings.threeFingerContinuationMs.max);
+    public static final int THREE_FINGER_CONTINUATION_MS_STEP = $($schema.gestureSettings.threeFingerContinuationMs.step);
 
     public static final List<RuleDefinition> RULES = Collections.unmodifiableList(Arrays.asList(
 $javaRuleList
@@ -85,6 +93,14 @@ $header = @"
 #define WB_SCHEMA_STATUS_PORT $($schema.statusPort)
 #define WB_SCHEMA_NONCE_HEX_LENGTH $($schema.nonceHexLength)
 #define WB_SCHEMA_MAX_DATAGRAM_BYTES $($schema.maxDatagramBytes)
+#define WB_SCHEMA_THREE_FINGER_SPEED_PERCENT_DEFAULT $($schema.gestureSettings.threeFingerSpeedPercent.default)
+#define WB_SCHEMA_THREE_FINGER_SPEED_PERCENT_MIN $($schema.gestureSettings.threeFingerSpeedPercent.min)
+#define WB_SCHEMA_THREE_FINGER_SPEED_PERCENT_MAX $($schema.gestureSettings.threeFingerSpeedPercent.max)
+#define WB_SCHEMA_THREE_FINGER_SPEED_PERCENT_STEP $($schema.gestureSettings.threeFingerSpeedPercent.step)
+#define WB_SCHEMA_THREE_FINGER_CONTINUATION_MS_DEFAULT $($schema.gestureSettings.threeFingerContinuationMs.default)
+#define WB_SCHEMA_THREE_FINGER_CONTINUATION_MS_MIN $($schema.gestureSettings.threeFingerContinuationMs.min)
+#define WB_SCHEMA_THREE_FINGER_CONTINUATION_MS_MAX $($schema.gestureSettings.threeFingerContinuationMs.max)
+#define WB_SCHEMA_THREE_FINGER_CONTINUATION_MS_STEP $($schema.gestureSettings.threeFingerContinuationMs.step)
 #define WB_SCHEMA_PAD_RULES "$(Escape-C $padRules)"
 #define WB_SCHEMA_WINDOWS_RULES "$(Escape-C $windowsRules)"
 

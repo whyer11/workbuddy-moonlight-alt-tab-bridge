@@ -17,6 +17,15 @@ if (($ruleIds | Sort-Object -Unique).Count -ne $ruleIds.Count) {
     throw 'Rule IDs must be unique.'
 }
 
+$speed = $schema.gestureSettings.threeFingerSpeedPercent
+if ($null -eq $speed -or $speed.default -ne 25 -or $speed.min -ne 10 -or $speed.max -ne 100 -or $speed.step -ne 5) {
+    throw 'Unexpected three-finger speed contract.'
+}
+$continuation = $schema.gestureSettings.threeFingerContinuationMs
+if ($null -eq $continuation -or $continuation.default -ne 1000 -or $continuation.min -ne 0 -or $continuation.max -ne 2000 -or $continuation.step -ne 100) {
+    throw 'Unexpected three-finger continuation contract.'
+}
+
 $temporary = Join-Path ([System.IO.Path]::GetTempPath()) ("workbuddy-schema-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $temporary | Out-Null
 try {
