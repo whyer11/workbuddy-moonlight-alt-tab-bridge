@@ -34,7 +34,8 @@ static void test_response_has_fixed_version_rules_and_matching_nonce(void) {
             response, sizeof(response), "00112233445566778899aabbccddeeff") > 0);
     assert(strcmp(response,
             "WB_STATUS_V2 nonce=00112233445566778899aabbccddeeff "
-            "host=0.7.0 protocol=2 core=ready rules=alt_tab,windows_key") == 0);
+            "host=" WB_SCHEMA_PRODUCT_VERSION
+            " protocol=2 core=ready rules=alt_tab,windows_key") == 0);
     assert(wb_status_format_response(
             response, 8, "00112233445566778899aabbccddeeff") == -1);
 }

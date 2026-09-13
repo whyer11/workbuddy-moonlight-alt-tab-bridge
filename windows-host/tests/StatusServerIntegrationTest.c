@@ -44,7 +44,8 @@ static void test_valid_request_gets_status_and_control_request_gets_nothing(void
     response[received] = '\0';
     assert(strcmp(response,
             "WB_STATUS_V2 nonce=00112233445566778899aabbccddeeff "
-            "host=0.7.0 protocol=2 core=ready rules=alt_tab,windows_key") == 0);
+            "host=" WB_SCHEMA_PRODUCT_VERSION
+            " protocol=2 core=ready rules=alt_tab,windows_key") == 0);
 
     const char *control = "RUN_KEY 00112233445566778899aabbccddeeff";
     received = exchange(client, wb_status_server_port(&server),
