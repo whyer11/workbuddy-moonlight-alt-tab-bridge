@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">WorkBuddy Alt+Tab</string>
-    <string name="bridge_title">Moonlight Alt+Tab 底层桥接</string>
-    <string name="bridge_description">通过 Shizuku 以系统 shell 权限启动底层键盘桥接，不使用辅助功能。物理 Alt+Tab 会转换为 Moonlight 12.1 支持的 Alt+F12，再由电脑端还原成 Windows Alt+Tab。</string>
+    <string name="bridge_title">Moonlight 键盘桥接</string>
+    <string name="bridge_description">集中查看已配置的按键转换，以及 Pad 底层桥接和 Windows Host 的实时运行状态。</string>
     <string name="start_bridge">授权并启动底层桥接</string>
+    <string name="computer_status_title">电脑端实时状态</string>
+    <string name="computer_host_hint">电脑 Tailscale IPv4 或 MagicDNS 名称</string>
+    <string name="save_computer_host">保存</string>
+    <string name="computer_host_saved">电脑地址已保存</string>
+    <string name="computer_host_help">状态探测只读取版本和规则列表，不提供远程控制；按键串流不依赖此探测。</string>
+    <string name="bridge_rules_title">桥接规则</string>
 </resources>
