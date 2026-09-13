@@ -1,5 +1,6 @@
 #include "key_remap.h"
 #include "native_protocol.h"
+#include "touchpad_bridge.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -144,9 +145,27 @@ int main(int argc, char **argv) {
         return 4;
     }
 
+    struct wb_touchpad_bridge touchpad;
+    struct wb_touchpad_drag_config drag_config = {
+        .activation_distance = 48,
+        .movement_numerator = 1,
+        .movement_denominator = 1,
+    };
+    if (wb_touchpad_bridge_open(&touchpad, drag_config) != 0) {
+        fprintf(stderr, "TOUCHPAD_OPEN_FAILED errno=%d message=%s\n",
+                errno, strerror(errno));
+        ioctl(virtual_fd, UI_DEV_DESTROY);
+        close(virtual_fd);
+        close(physical_fd);
+        return 11;
+    }
+    printf("TOUCHPAD_READY physical=%s virtual=WorkBuddy_Virtual_Mouse "
+            "threshold=48 scale=1/1\n", wb_touchpad_bridge_path(&touchpad));
+
     usleep(350000);
     if (ioctl(physical_fd, EVIOCGRAB, 1) != 0) {
         fprintf(stderr, "PHYSICAL_GRAB_FAILED errno=%d message=%s\n", errno, strerror(errno));
+        wb_touchpad_bridge_close(&touchpad);
         ioctl(virtual_fd, UI_DEV_DESTROY);
         close(virtual_fd);
         close(physical_fd);
@@ -156,6 +175,7 @@ int main(int argc, char **argv) {
     char ready_line[256];
     if (wb_native_write_ready(ready_line, sizeof(ready_line), physical_path) < 0) {
         fprintf(stderr, "READY_FORMAT_FAILED\n");
+        wb_touchpad_bridge_close(&touchpad);
         ioctl(physical_fd, EVIOCGRAB, 0);
         ioctl(virtual_fd, UI_DEV_DESTROY);
         close(virtual_fd);
@@ -167,11 +187,14 @@ int main(int argc, char **argv) {
     struct key_remap_state remap_state = {0};
     struct input_event pending_scan;
     bool has_pending_scan = false;
-    struct pollfd poll_fd = {.fd = physical_fd, .events = POLLIN};
+    struct pollfd poll_fds[2] = {
+        {.fd = physical_fd, .events = POLLIN},
+        {.fd = wb_touchpad_bridge_fd(&touchpad), .events = POLLIN},
+    };
     int result = 0;
 
     while (!stop_requested) {
-        int ready = poll(&poll_fd, 1, 500);
+        int ready = poll(poll_fds, 2, 500);
         if (ready < 0) {
             if (errno == EINTR) {
                 continue;
@@ -181,6 +204,22 @@ int main(int argc, char **argv) {
             break;
         }
         if (ready == 0) {
+            continue;
+        }
+
+        if ((poll_fds[1].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+            fprintf(stderr, "TOUCHPAD_POLL_FAILED revents=%d\n", poll_fds[1].revents);
+            result = 12;
+            break;
+        }
+        if ((poll_fds[1].revents & POLLIN) != 0
+                && wb_touchpad_bridge_drain(&touchpad) != 0) {
+            fprintf(stderr, "TOUCHPAD_IO_FAILED errno=%d message=%s\n",
+                    errno, strerror(errno));
+            result = 12;
+            break;
+        }
+        if ((poll_fds[0].revents & POLLIN) == 0) {
             continue;
         }
 
@@ -235,6 +274,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    wb_touchpad_bridge_close(&touchpad);
     ioctl(physical_fd, EVIOCGRAB, 0);
     ioctl(virtual_fd, UI_DEV_DESTROY);
     close(virtual_fd);
