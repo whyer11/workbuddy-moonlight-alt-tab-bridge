@@ -1,0 +1,203 @@
+name: Bridge Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android:
+    name: Signed Android release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;29.0.14206865'
+
+      - name: Resolve and verify version
+        id: version
+        shell: bash
+        run: |
+          version="$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+['\"]([^'\"]+)['\"].*/\1/p" android-bridge/app/build.gradle | head -n 1)"
+          if [[ -z "$version" ]]; then
+            echo 'Unable to read versionName from android-bridge/app/build.gradle' >&2
+            exit 1
+          fi
+          release_tag="v$version"
+          if [[ "$GITHUB_REF_TYPE" == 'tag' && "$GITHUB_REF_NAME" != "$release_tag" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match $release_tag" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Decode release keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/workbuddy-bridge-release.p12"
+          chmod 600 "$RUNNER_TEMP/workbuddy-bridge-release.p12"
+
+      - name: Verify protocol and native tests
+        shell: bash
+        run: |
+          pwsh -NoProfile -File protocol/tests/GeneratedSchemaTest.ps1
+          scripts/ci/run-native-tests.sh
+
+      - name: Build Android ARM64 bridge
+        shell: bash
+        run: |
+          ANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/29.0.14206865" \
+            scripts/ci/build-native-android.sh
+          install -m 0755 \
+            build/ci/native/alttab_evdev_bridge \
+            android-bridge/app/src/main/assets/alttab_evdev_bridge
+
+      - name: Test and build signed APK
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/workbuddy-bridge-release.p12
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./android-bridge/gradlew -p android-bridge :app:testDebugUnitTest :app:assembleRelease --no-daemon
+
+      - name: Verify and stage signed APK
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $tools = Join-Path $env:ANDROID_SDK_ROOT 'build-tools/36.0.0'
+          ./scripts/ci/verify-android-release.ps1 `
+            -ApkPath android-bridge/app/build/outputs/apk/release/app-release.apk `
+            -Aapt2 (Join-Path $tools 'aapt2') `
+            -Zipalign (Join-Path $tools 'zipalign') `
+            -Apksigner (Join-Path $tools 'apksigner')
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item android-bridge/app/build/outputs/apk/release/app-release.apk `
+            "dist/WorkBuddy-Bridge-$env:RELEASE_VERSION.apk"
+
+      - name: Upload signed Android artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bridge-android-release
+          path: dist/WorkBuddy-Bridge-${{ steps.version.outputs.version }}.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Windows release package
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Resolve and verify version
+        id: version
+        shell: pwsh
+        run: |
+          $text = Get-Content -Raw android-bridge/app/build.gradle
+          $match = [regex]::Match($text, "versionName\s+['\"]([^'\"]+)['\"]")
+          if (-not $match.Success) { throw 'Unable to read Android versionName' }
+          $version = $match.Groups[1].Value
+          $releaseTag = "v$version"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $releaseTag) {
+            throw "Tag $env:GITHUB_REF_NAME does not match $releaseTag"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Set up MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          path-type: inherit
+          install: mingw-w64-ucrt-x86_64-gcc
+
+      - name: Test and package Windows host
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: ./scripts/ci/build-windows.ps1 -SkipInteractiveTests
+
+      - name: Upload Windows release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bridge-windows-release
+          path: build/ci/windows/WorkBuddy-Bridge-Windows-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: bridge-*-release
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd dist
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' \
+            | sort \
+            | xargs sha256sum > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+
+      - name: Publish immutable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; refusing to overwrite" >&2
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "WorkBuddy Bridge ${GITHUB_REF_NAME#v}" \
+            --generate-notes

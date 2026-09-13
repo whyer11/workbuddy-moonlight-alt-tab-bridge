@@ -41,6 +41,18 @@ Shizuku 13.6.0 在 Android 13 及以上、已授予 `WRITE_SECURE_SETTINGS` 且�
 4. 确认 Windows 任务管理器中有 `WorkBuddyAltTabHost.exe`；退出并重新登录 Windows 会自动恢复。
 5. 若只有电脑端状态离线，重新运行管理员 PowerShell 脚本 `windows-host\install-status-firewall.ps1`。
 
+## 正式发布
+
+GitHub Actions 会在普通提交和 Pull Request 上重新编译并测试 Pad 原生桥接、Android 应用和 Windows Host。推送与 `android-bridge/app/build.gradle` 中 `versionName` 完全一致的 `v*` 标签后，Release 工作流会使用 GitHub `release` Environment 中的正式证书，自动发布：
+
+- `WorkBuddy-Bridge-<version>.apk`
+- `WorkBuddy-Bridge-Windows-<version>.zip`
+- `SHA256SUMS.txt`
+
+Windows ZIP 包含后台程序 `WorkBuddyAltTabHost.exe`、状态防火墙脚本和版本说明。该 EXE 当前没有 Authenticode 商业代码签名；APK 使用 WorkBuddy Bridge 专用长期证书签名。
+
+`0.9.1` 之前安装到 Pad 的版本使用本地测试证书，因此第一次迁移到 GitHub 正式版时必须先卸载旧 APK，再安装正式 APK并重新授予 Shizuku 权限。完成这一次迁移后，后续正式版本可以原位升级。发布维护顺序固定为：同步修改协议/原生/Android 版本，等待分支 CI 通过，再创建并推送 `v${versionName}` 标签。已存在的标签或 Release 不允许覆盖。
+
 ## 回滚
 
 Pad 原生程序的上一版本保存在 `/data/local/tmp/alttab_evdev_bridge.previous`；Windows 0.6.0 备份为 `%LOCALAPPDATA%\WorkBuddyAltTab\WorkBuddyAltTabHost-0.6.0-backup.exe`。完整卸载时，可卸载 Pad 上的 `WorkBuddy Alt+Tab` 和 Shizuku；删除 Windows 登录项 `WorkBuddyAltTabHost`，结束同名进程，并删除 `%LOCALAPPDATA%\WorkBuddyAltTab`。如需同时清理状态接口，可删除名为 `WorkBuddy Bridge Status (Tailscale)` 的 Windows 防火墙规则。回滚不会改动 Moonlight、Sunshine、Tailscale 或串流显示配置。
