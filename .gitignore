@@ -9,3 +9,8 @@ local.properties
 config/config.json
 *.user
 *.exe
+*.jks
+*.keystore
+*.p12
+.signing/
+build/ci/

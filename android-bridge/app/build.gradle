@@ -2,6 +2,19 @@ plugins {
     id 'com.android.application'
 }
 
+def releaseSigning = [
+        storeFile: System.getenv('ANDROID_KEYSTORE_FILE'),
+        storePassword: System.getenv('ANDROID_KEYSTORE_PASSWORD'),
+        keyAlias: System.getenv('ANDROID_KEY_ALIAS'),
+        keyPassword: System.getenv('ANDROID_KEY_PASSWORD')
+]
+def releaseSigningComplete = releaseSigning.values().every { it != null && !it.trim().isEmpty() }
+def releaseTaskRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
+
+if (releaseTaskRequested && !releaseSigningComplete) {
+    throw new GradleException('Release signing environment is incomplete')
+}
+
 android {
     namespace 'local.workbuddy.alttab'
     compileSdk 36
@@ -20,6 +33,28 @@ android {
 
     testOptions {
         unitTests.returnDefaultValues = true
+    }
+
+    if (releaseSigningComplete) {
+        signingConfigs {
+            release {
+                storeFile file(releaseSigning.storeFile)
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+                storeType 'PKCS12'
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (releaseSigningComplete) {
+                signingConfig signingConfigs.release
+            }
+        }
     }
 }
 
