@@ -38,6 +38,7 @@
 - `protocol/tests/GeneratedSchemaTest.ps1`: expected four-rule order.
 - Generated outputs: `GeneratedBridgeSchema.java`, `generated_bridge_schema.h`, `GeneratedBridgeSchema.h`.
 - `android-bridge/app/build.gradle`: versionCode `10`, versionName `0.8.0`.
+- `android-bridge/app/src/main/java/local/workbuddy/alttab/BridgeController.java`: Shizuku UserService version `10`, forcing replacement of the 0.7.0 service.
 - `BridgeRules.java` and `BridgeRulesTest.java`: expose and verify the new rule.
 - `DashboardStateReducerTest.java`: verify the rule is Pad-only and participates in Pad capability health.
 - `native_protocol_test.c`: expect 0.8.0 and the fourth native rule.
@@ -55,9 +56,11 @@ Windows Host implementation files are not edited. `windows-host/src/GeneratedBri
 - Modify: `protocol/bridge-schema.json`
 - Modify: `protocol/tests/GeneratedSchemaTest.ps1`
 - Modify: `android-bridge/app/build.gradle`
+- Modify: `android-bridge/app/src/main/java/local/workbuddy/alttab/BridgeController.java`
 - Modify: `android-bridge/app/src/main/java/local/workbuddy/alttab/BridgeRules.java`
 - Modify: `android-bridge/app/src/test/java/local/workbuddy/alttab/BridgeRulesTest.java`
 - Modify: `android-bridge/app/src/test/java/local/workbuddy/alttab/domain/DashboardStateReducerTest.java`
+- Modify: `android-bridge/app/src/test/java/local/workbuddy/alttab/nativebridge/NativeCapabilityParserTest.java`
 - Regenerate: `android-bridge/app/src/main/java/local/workbuddy/alttab/generated/GeneratedBridgeSchema.java`
 - Regenerate: `native-bridge/src/generated_bridge_schema.h`
 - Regenerate: `windows-host/src/GeneratedBridgeSchema.h`
@@ -120,6 +123,12 @@ versionCode 10
 versionName '0.8.0'
 ```
 
+Set the Shizuku `UserServiceArgs` version in `BridgeController.java` to the same release code:
+
+```java
+.version(10);
+```
+
 Add to `BridgeRules.java`:
 
 ```java
@@ -180,7 +189,7 @@ Use three initial coordinates `(300,300)`, `(600,300)`, `(900,300)`. Moving all 
 
 ```powershell
 New-Item -ItemType Directory -Force .tools\three-finger-drag | Out-Null
-gcc native-bridge\tests\touchpad_drag_state_test.c native-bridge\src\touchpad_drag_state.c -std=c11 -Wall -Wextra -Werror -pedantic -o .tools\three-finger-drag\touchpad_drag_state_test.exe
+gcc native-bridge\tests\touchpad_drag_state_test.c native-bridge\src\touchpad_drag_state.c -I native-bridge\src -std=c11 -Wall -Wextra -Werror -pedantic -o .tools\three-finger-drag\touchpad_drag_state_test.exe
 ```
 
 Expected: compilation fails because the state-machine files and symbols do not exist.
@@ -308,7 +317,10 @@ git commit -m "feat: add three-finger drag state machine"
 Create `virtual_mouse_device_test.ps1` with parameters `AdbPath` and `Target`. Read `dumpsys input`, find `WorkBuddy Virtual Mouse`, require class `CURSOR`, reject `KEYBOARD|GAMEPAD|STYLUS`, resolve its `/dev/input/eventN`, then run `getevent -il` and require exactly the intended functional capabilities:
 
 ```powershell
-foreach ($required in @('BTN_LEFT', 'REL_X', 'REL_Y')) {
+if ($capabilities -notmatch '\b(BTN_MOUSE|BTN_LEFT)\b') {
+    throw 'Virtual mouse is missing left-button capability (BTN_MOUSE/BTN_LEFT).'
+}
+foreach ($required in @('REL_X', 'REL_Y')) {
     if ($capabilities -notmatch "\b$required\b") {
         throw "Virtual mouse is missing required capability: $required"
     }
@@ -381,8 +393,9 @@ Return `0` for success/EAGAIN and `-1` for EOF, short reads, or write failures. 
 - [ ] **Step 5: Build the adapter with Android NDK strict flags**
 
 ```powershell
-$clang = '.\.tools\android-sdk\ndk\29.0.14206865\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android26-clang.cmd'
-& $clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -c native-bridge\src\touchpad_bridge.c -o .tools\three-finger-drag\touchpad_bridge.o
+$toolRoot = '..\..\.tools'
+$clang = "$toolRoot\android-sdk\ndk\29.0.14206865\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android26-clang.cmd"
+& $clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I native-bridge\src -c native-bridge\src\touchpad_bridge.c -o .tools\three-finger-drag\touchpad_bridge.o
 ```
 
 Expected: compilation succeeds with no warning.
@@ -422,7 +435,7 @@ Change `native_protocol_test.c` expected strings to:
 Compile and run:
 
 ```powershell
-gcc native-bridge\tests\native_protocol_test.c native-bridge\src\native_protocol.c -std=c11 -Wall -Wextra -Werror -pedantic -o .tools\three-finger-drag\native_protocol_test.exe
+gcc native-bridge\tests\native_protocol_test.c native-bridge\src\native_protocol.c -I native-bridge\src -std=c11 -Wall -Wextra -Werror -pedantic -o .tools\three-finger-drag\native_protocol_test.exe
 & .\.tools\three-finger-drag\native_protocol_test.exe
 ```
 
@@ -483,7 +496,7 @@ Do not call touchpad close before it has been initialized. Preserve existing res
 - [ ] **Step 5: Run all native host tests**
 
 ```powershell
-gcc native-bridge\tests\key_remap_test.c native-bridge\src\key_remap.c -std=c11 -Wall -Wextra -Werror -pedantic -o .tools\three-finger-drag\key_remap_test.exe
+gcc native-bridge\tests\key_remap_test.c native-bridge\src\key_remap.c -I native-bridge\src -std=c11 -Wall -Wextra -Werror -pedantic -o .tools\three-finger-drag\key_remap_test.exe
 & .\.tools\three-finger-drag\key_remap_test.exe
 & .\.tools\three-finger-drag\native_protocol_test.exe
 & .\.tools\three-finger-drag\touchpad_drag_state_test.exe
@@ -494,17 +507,19 @@ Expected: `key_remap_test: OK`, `native_protocol_test: OK`, and `touchpad_drag_s
 - [ ] **Step 6: Build the complete ARM64 binary**
 
 ```powershell
-$clang = '.\.tools\android-sdk\ndk\29.0.14206865\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android26-clang.cmd'
+$toolRoot = '..\..\.tools'
+$clang = "$toolRoot\android-sdk\ndk\29.0.14206865\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android26-clang.cmd"
 & $clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic `
+  -I native-bridge\src `
   native-bridge\src\alttab_evdev_bridge.c `
   native-bridge\src\key_remap.c `
   native-bridge\src\native_protocol.c `
   native-bridge\src\touchpad_drag_state.c `
   native-bridge\src\touchpad_bridge.c `
   -o .tools\three-finger-drag\alttab_evdev_bridge
-& .\.tools\platform-tools\adb.exe -s 192.168.0.126:40735 push .tools\three-finger-drag\alttab_evdev_bridge /data/local/tmp/workbuddy-three-finger-drag-probe
-& .\.tools\platform-tools\adb.exe -s 192.168.0.126:40735 shell chmod 700 /data/local/tmp/workbuddy-three-finger-drag-probe
-& .\.tools\platform-tools\adb.exe -s 192.168.0.126:40735 shell /data/local/tmp/workbuddy-three-finger-drag-probe --describe
+& "$toolRoot\platform-tools\adb.exe" -s 192.168.0.126:40735 push .tools\three-finger-drag\alttab_evdev_bridge /data/local/tmp/workbuddy-three-finger-drag-probe
+& "$toolRoot\platform-tools\adb.exe" -s 192.168.0.126:40735 shell chmod 700 /data/local/tmp/workbuddy-three-finger-drag-probe
+& "$toolRoot\platform-tools\adb.exe" -s 192.168.0.126:40735 shell /data/local/tmp/workbuddy-three-finger-drag-probe --describe
 ```
 
 Expected: strict NDK build succeeds; `--describe` returns version 0.8.0 and all four Pad rule IDs without opening or grabbing any input device.
@@ -561,11 +576,12 @@ Expected: schema test and three native tests print `OK`; all Android JUnit tests
 - [ ] **Step 3: Build the APK with the established manual Android chain**
 
 ```powershell
-$javaHome = (Resolve-Path '.\.tools\jdk-extract\jdk-17.0.20.1+1').Path
-$sdk = (Resolve-Path '.\.tools\android-sdk').Path
+$toolRoot = (Resolve-Path '..\..\.tools').Path
+$javaHome = Join-Path $toolRoot 'jdk-extract\jdk-17.0.20.1+1'
+$sdk = Join-Path $toolRoot 'android-sdk'
 $buildTools = Join-Path $sdk 'build-tools\36.0.0'
 $androidJar = Join-Path $sdk 'platforms\android-36\android.jar'
-$out = Join-Path (Resolve-Path '.\android-bridge\app\build').Path 'manual-release-0.8.0'
+$out = Join-Path (Get-Location).Path 'android-bridge\app\build\manual-release-0.8.0'
 New-Item -ItemType Directory -Force $out, "$out\gen", "$out\classes", "$out\dex" | Out-Null
 
 & "$buildTools\aapt2.exe" compile --dir .\android-bridge\app\src\main\res -o "$out\resources.zip"
@@ -590,11 +606,11 @@ $buildConfigPath = "$out\gen\local\workbuddy\alttab\BuildConfig.java"
 [System.IO.File]::WriteAllText($buildConfigPath, $buildConfig, [System.Text.UTF8Encoding]::new($false))
 
 $shizuku = @(
-  '.\.tools\shizuku-api-13.1.5\annotation-1.3.0.jar',
-  '.\.tools\shizuku-api-13.1.5\aidl\classes.jar',
-  '.\.tools\shizuku-api-13.1.5\api\classes.jar',
-  '.\.tools\shizuku-api-13.1.5\provider\classes.jar',
-  '.\.tools\shizuku-api-13.1.5\shared\classes.jar'
+  "$toolRoot\shizuku-api-13.1.5\annotation-1.3.0.jar",
+  "$toolRoot\shizuku-api-13.1.5\aidl\classes.jar",
+  "$toolRoot\shizuku-api-13.1.5\api\classes.jar",
+  "$toolRoot\shizuku-api-13.1.5\provider\classes.jar",
+  "$toolRoot\shizuku-api-13.1.5\shared\classes.jar"
 ) | ForEach-Object { (Resolve-Path $_).Path }
 $sources = @(
   Get-ChildItem .\android-bridge\app\src\main\java -Recurse -Filter *.java | ForEach-Object FullName
@@ -610,21 +626,24 @@ Copy-Item "$out\bridge-unsigned.apk" "$out\bridge-with-dex.apk" -Force
 & "$javaHome\bin\jar.exe" uf "$out\bridge-with-dex.apk" -C "$out\dex" classes.dex
 & "$buildTools\zipalign.exe" -f -P 16 4 "$out\bridge-with-dex.apk" "$out\bridge-aligned.apk"
 & "$buildTools\apksigner.bat" sign `
-  --ks .\.tools\probe-debug.keystore `
-  --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android `
+  --ks "$toolRoot\probe-debug.keystore" `
+  --ks-key-alias probe `
   --out "$out\workbuddy-alt-tab-0.8.0.apk" "$out\bridge-aligned.apk"
 ```
+
+`apksigner` 在交互终端中读取 keystore 与 key 密码；密码不进入命令行、日志或仓库。
 
 Expected: `android-bridge/app/build/manual-release-0.8.0/workbuddy-alt-tab-0.8.0.apk` exists and contains `assets/alttab_evdev_bridge`. This deliberately avoids the already recorded Gradle loopback-selector packaging failure while still using the same repository-local Android 36 tools and signing key as 0.7.0.
 
 - [ ] **Step 4: Verify identity before installation**
 
 ```powershell
-$buildTools = '.\.tools\android-sdk\build-tools\36.0.0'
+$toolRoot = (Resolve-Path '..\..\.tools').Path
+$buildTools = Join-Path $toolRoot 'android-sdk\build-tools\36.0.0'
 $apk = '.\android-bridge\app\build\manual-release-0.8.0\workbuddy-alt-tab-0.8.0.apk'
 & "$buildTools\zipalign.exe" -c -P 16 -v 4 $apk
 & "$buildTools\apksigner.bat" verify --verbose --print-certs $apk
-& .\.tools\platform-tools\adb.exe -s 192.168.0.126:40735 shell dumpsys package local.workbuddy.alttab | Select-String 'versionCode|versionName'
+& "$toolRoot\platform-tools\adb.exe" -s 192.168.0.126:40735 shell dumpsys package local.workbuddy.alttab | Select-String 'versionCode|versionName'
 ```
 
 Record the installed certificate digest before replacement and require the candidate digest to remain `CB952E9472E9970483FA68E9474ADA70A5A98DA35B6F9EABB1D5A8B5B8D8B7D0`.
@@ -632,9 +651,9 @@ Record the installed certificate digest before replacement and require the candi
 - [ ] **Step 5: Install in place and verify one supervised instance**
 
 ```powershell
-& .\.tools\platform-tools\adb.exe -s 192.168.0.126:40735 install -r $apk
-& .\.tools\platform-tools\adb.exe -s 192.168.0.126:40735 shell am force-stop local.workbuddy.alttab
-& .\.tools\platform-tools\adb.exe -s 192.168.0.126:40735 shell monkey -p local.workbuddy.alttab 1
+& "$toolRoot\platform-tools\adb.exe" -s 192.168.0.126:40735 install -r $apk
+& "$toolRoot\platform-tools\adb.exe" -s 192.168.0.126:40735 shell am force-stop local.workbuddy.alttab
+& "$toolRoot\platform-tools\adb.exe" -s 192.168.0.126:40735 shell monkey -p local.workbuddy.alttab 1
 ```
 
 Wait for Shizuku binding, then require one app process, one UserService, and one `/data/local/tmp/alttab_evdev_bridge`. Confirm the deployed native hash matches the APK asset and `--describe` reports 0.8.0.
@@ -642,8 +661,8 @@ Wait for Shizuku binding, then require one app process, one UserService, and one
 - [ ] **Step 6: Validate both virtual input devices**
 
 ```powershell
-& .\native-bridge\tests\virtual_keyboard_device_test.ps1 -AdbPath .\.tools\platform-tools\adb.exe -Target 192.168.0.126:40735
-& .\native-bridge\tests\virtual_mouse_device_test.ps1 -AdbPath .\.tools\platform-tools\adb.exe -Target 192.168.0.126:40735
+& .\native-bridge\tests\virtual_keyboard_device_test.ps1 -AdbPath "$toolRoot\platform-tools\adb.exe" -Target 192.168.0.126:40735
+& .\native-bridge\tests\virtual_mouse_device_test.ps1 -AdbPath "$toolRoot\platform-tools\adb.exe" -Target 192.168.0.126:40735
 ```
 
 Expected: keyboard test remains PASS; mouse test reports a `CURSOR` device with only the planned mouse capabilities. Confirm `getevent -pl /dev/input/event11` still succeeds while the bridge runs, proving the physical touchpad is not grabbed.
