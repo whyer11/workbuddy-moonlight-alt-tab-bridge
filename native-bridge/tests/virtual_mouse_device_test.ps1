@@ -40,7 +40,10 @@ $capabilities = ((& $AdbPath -s $Target shell getevent -il $eventPath) | Out-Str
 if ($LASTEXITCODE -ne 0) {
     throw "Could not inspect virtual mouse capabilities at $eventPath."
 }
-foreach ($required in @('BTN_LEFT', 'REL_X', 'REL_Y')) {
+if ($capabilities -notmatch '\b(BTN_MOUSE|BTN_LEFT)\b') {
+    throw 'Virtual mouse is missing left-button capability (BTN_MOUSE/BTN_LEFT).'
+}
+foreach ($required in @('REL_X', 'REL_Y')) {
     if ($capabilities -notmatch "\b$required\b") {
         throw "Virtual mouse is missing required capability: $required"
     }

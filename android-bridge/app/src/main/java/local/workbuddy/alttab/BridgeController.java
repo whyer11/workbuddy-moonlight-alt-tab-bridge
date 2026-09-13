@@ -27,7 +27,7 @@ public final class BridgeController {
                     .daemon(true)
                     .processNameSuffix("bridge")
                     .debuggable(false)
-                    .version(9);
+                    .version(10);
 
     private static final ServiceConnection CONNECTION = new ServiceConnection() {
         @Override
