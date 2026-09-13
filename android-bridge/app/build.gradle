@@ -6,6 +6,10 @@ android {
     namespace 'local.workbuddy.alttab'
     compileSdk 36
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId 'local.workbuddy.alttab'
         minSdk 26
