@@ -131,7 +131,7 @@ jobs:
         shell: pwsh
         run: |
           $text = Get-Content -Raw android-bridge/app/build.gradle
-          $match = [regex]::Match($text, "versionName\s+['\"]([^'\"]+)['\"]")
+          $match = [regex]::Match($text, "versionName\s+'([^']+)'")
           if (-not $match.Success) { throw 'Unable to read Android versionName' }
           $version = $match.Groups[1].Value
           $releaseTag = "v$version"
