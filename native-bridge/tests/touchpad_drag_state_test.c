@@ -111,6 +111,27 @@ static void test_fourth_finger_cancels_and_releases(void) {
     assert_output(wb_touchpad_drag_finish_frame(&state), WB_DRAG_LEFT_UP, 0, 0);
 }
 
+static void test_fourth_tracking_id_releases_before_coordinates_arrive(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    wb_touchpad_drag_select_slot(&state, 3);
+    wb_touchpad_drag_set_tracking_id(&state, 103);
+    assert_output(wb_touchpad_drag_finish_frame(&state), WB_DRAG_LEFT_UP, 0, 0);
+}
+
+static void test_replacement_waits_for_complete_coordinates(void) {
+    struct wb_touchpad_drag_state state;
+    start_drag(&state);
+    end_contact(&state, 2);
+    wb_touchpad_drag_select_slot(&state, 2);
+    wb_touchpad_drag_set_tracking_id(&state, 202);
+    wb_touchpad_drag_set_x(&state, 948);
+    assert_output(wb_touchpad_drag_finish_frame(&state), WB_DRAG_LEFT_UP, 0, 0);
+    assert_output(wb_touchpad_drag_finish_frame(&state), WB_DRAG_NONE, 0, 0);
+    wb_touchpad_drag_set_y(&state, 300);
+    assert_output(wb_touchpad_drag_finish_frame(&state), WB_DRAG_NONE, 0, 0);
+}
+
 static void test_replacing_a_finger_releases_before_rearming(void) {
     struct wb_touchpad_drag_state state;
     start_drag(&state);
@@ -141,6 +162,8 @@ int main(void) {
     test_drag_continues_without_repeating_button_down();
     test_lifting_one_finger_releases_button();
     test_fourth_finger_cancels_and_releases();
+    test_fourth_tracking_id_releases_before_coordinates_arrive();
+    test_replacement_waits_for_complete_coordinates();
     test_replacing_a_finger_releases_before_rearming();
     test_cancel_releases_only_an_active_drag();
     puts("touchpad_drag_state_test: OK");

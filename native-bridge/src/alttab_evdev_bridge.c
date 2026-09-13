@@ -145,7 +145,12 @@ int main(int argc, char **argv) {
         return 4;
     }
 
-    struct wb_touchpad_bridge touchpad;
+    struct wb_touchpad_bridge touchpad = {
+        .physical_fd = -1,
+        .virtual_fd = -1,
+    };
+    bool keyboard_grabbed = false;
+    int result = 0;
     struct wb_touchpad_drag_config drag_config = {
         .activation_distance = 48,
         .movement_numerator = 1,
@@ -154,10 +159,8 @@ int main(int argc, char **argv) {
     if (wb_touchpad_bridge_open(&touchpad, drag_config) != 0) {
         fprintf(stderr, "TOUCHPAD_OPEN_FAILED errno=%d message=%s\n",
                 errno, strerror(errno));
-        ioctl(virtual_fd, UI_DEV_DESTROY);
-        close(virtual_fd);
-        close(physical_fd);
-        return 11;
+        result = 11;
+        goto cleanup;
     }
     printf("TOUCHPAD_READY physical=%s virtual=WorkBuddy_Virtual_Mouse "
             "threshold=48 scale=1/1\n", wb_touchpad_bridge_path(&touchpad));
@@ -165,22 +168,16 @@ int main(int argc, char **argv) {
     usleep(350000);
     if (ioctl(physical_fd, EVIOCGRAB, 1) != 0) {
         fprintf(stderr, "PHYSICAL_GRAB_FAILED errno=%d message=%s\n", errno, strerror(errno));
-        wb_touchpad_bridge_close(&touchpad);
-        ioctl(virtual_fd, UI_DEV_DESTROY);
-        close(virtual_fd);
-        close(physical_fd);
-        return 5;
+        result = 5;
+        goto cleanup;
     }
+    keyboard_grabbed = true;
 
     char ready_line[256];
     if (wb_native_write_ready(ready_line, sizeof(ready_line), physical_path) < 0) {
         fprintf(stderr, "READY_FORMAT_FAILED\n");
-        wb_touchpad_bridge_close(&touchpad);
-        ioctl(physical_fd, EVIOCGRAB, 0);
-        ioctl(virtual_fd, UI_DEV_DESTROY);
-        close(virtual_fd);
-        close(physical_fd);
-        return 10;
+        result = 10;
+        goto cleanup;
     }
     puts(ready_line);
 
@@ -191,8 +188,6 @@ int main(int argc, char **argv) {
         {.fd = physical_fd, .events = POLLIN},
         {.fd = wb_touchpad_bridge_fd(&touchpad), .events = POLLIN},
     };
-    int result = 0;
-
     while (!stop_requested) {
         int ready = poll(poll_fds, 2, 500);
         if (ready < 0) {
@@ -274,8 +269,11 @@ int main(int argc, char **argv) {
         }
     }
 
+cleanup:
     wb_touchpad_bridge_close(&touchpad);
-    ioctl(physical_fd, EVIOCGRAB, 0);
+    if (keyboard_grabbed) {
+        ioctl(physical_fd, EVIOCGRAB, 0);
+    }
     ioctl(virtual_fd, UI_DEV_DESTROY);
     close(virtual_fd);
     close(physical_fd);
