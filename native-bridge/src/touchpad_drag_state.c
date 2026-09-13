@@ -1,5 +1,6 @@
 #include "touchpad_drag_state.h"
 
+#include <limits.h>
 #include <string.h>
 
 static struct wb_touchpad_drag_output no_output(void) {
@@ -10,6 +11,25 @@ static struct wb_touchpad_drag_output no_output(void) {
 static struct wb_touchpad_drag_output release_output(void) {
     const struct wb_touchpad_drag_output output = {WB_DRAG_LEFT_UP, 0, 0};
     return output;
+}
+
+static void clear_motion_runtime(struct wb_touchpad_drag_state *state) {
+    state->grace_deadline_ms = 0;
+    state->remainder_x = 0;
+    state->remainder_y = 0;
+}
+
+static void enter_idle(struct wb_touchpad_drag_state *state) {
+    state->phase = WB_TOUCHPAD_IDLE;
+    clear_motion_runtime(state);
+}
+
+static struct wb_touchpad_drag_output release_if_pressed(
+        struct wb_touchpad_drag_state *state) {
+    bool was_pressed = state->button_down;
+    state->button_down = false;
+    enter_idle(state);
+    return was_pressed ? release_output() : no_output();
 }
 
 static void reset_runtime(struct wb_touchpad_drag_state *state) {
@@ -25,10 +45,13 @@ void wb_touchpad_drag_init(struct wb_touchpad_drag_state *state,
         config.activation_distance = 48;
     }
     if (config.movement_numerator <= 0) {
-        config.movement_numerator = 1;
+        config.movement_numerator = 25;
     }
     if (config.movement_denominator <= 0) {
-        config.movement_denominator = 1;
+        config.movement_denominator = 100;
+    }
+    if (config.continuation_ms < 0) {
+        config.continuation_ms = 1000;
     }
     memset(state, 0, sizeof(*state));
     state->selected_slot = 0;
@@ -87,10 +110,70 @@ static void arm_at(struct wb_touchpad_drag_state *state, int x, int y) {
     state->start_y = y;
     state->last_x = x;
     state->last_y = y;
+    clear_motion_runtime(state);
+}
+
+static void resume_at(struct wb_touchpad_drag_state *state, int x, int y) {
+    state->phase = WB_TOUCHPAD_DRAGGING;
+    state->last_x = x;
+    state->last_y = y;
+    clear_motion_runtime(state);
+}
+
+static struct wb_touchpad_drag_output enter_grace(
+        struct wb_touchpad_drag_state *state, int64_t now_ms) {
+    clear_motion_runtime(state);
+    if (state->config.continuation_ms == 0) {
+        return release_if_pressed(state);
+    }
+    state->phase = WB_TOUCHPAD_GRACE;
+    state->grace_deadline_ms = now_ms + state->config.continuation_ms;
+    return no_output();
+}
+
+static int scale_delta(int delta,
+                       int numerator,
+                       int denominator,
+                       long long *remainder) {
+    long long scaled = (long long)delta * numerator + *remainder;
+    long long output = scaled / denominator;
+    *remainder = scaled % denominator;
+    if (output > INT_MAX) return INT_MAX;
+    if (output < INT_MIN) return INT_MIN;
+    return (int)output;
+}
+
+struct wb_touchpad_drag_output wb_touchpad_drag_tick(
+        struct wb_touchpad_drag_state *state, int64_t now_ms) {
+    if (state->phase == WB_TOUCHPAD_GRACE
+            && now_ms >= state->grace_deadline_ms) {
+        return release_if_pressed(state);
+    }
+    return no_output();
+}
+
+int wb_touchpad_drag_next_timeout_ms(
+        const struct wb_touchpad_drag_state *state,
+        int64_t now_ms,
+        int fallback_ms) {
+    if (fallback_ms < 0) {
+        fallback_ms = 0;
+    }
+    if (state->phase != WB_TOUCHPAD_GRACE) {
+        return fallback_ms;
+    }
+    int64_t remaining = state->grace_deadline_ms - now_ms;
+    if (remaining <= 0) {
+        return 0;
+    }
+    if (remaining >= fallback_ms) {
+        return fallback_ms;
+    }
+    return (int)remaining;
 }
 
 struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
-        struct wb_touchpad_drag_state *state) {
+        struct wb_touchpad_drag_state *state, int64_t now_ms) {
     int active_count = 0;
     int sum_x = 0;
     int sum_y = 0;
@@ -112,18 +195,42 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
     bool composition_changed = state->composition_changed;
     state->composition_changed = false;
 
-    if (active_count != 3) {
-        bool was_dragging = state->phase == WB_TOUCHPAD_DRAGGING;
-        state->phase = WB_TOUCHPAD_IDLE;
-        return was_dragging ? release_output() : no_output();
+    if (active_count >= 4) {
+        return release_if_pressed(state);
     }
-    if (composition_changed && state->phase == WB_TOUCHPAD_DRAGGING) {
-        state->phase = WB_TOUCHPAD_IDLE;
-        return release_output();
+
+    struct wb_touchpad_drag_output expired = wb_touchpad_drag_tick(state, now_ms);
+    if ((expired.actions & WB_DRAG_LEFT_UP) != 0) {
+        if (active_count == 3 && coordinates_complete) {
+            arm_at(state, sum_x / 3, sum_y / 3);
+        }
+        return expired;
+    }
+
+    if (state->phase == WB_TOUCHPAD_DRAGGING
+            && (active_count != 3 || composition_changed)) {
+        struct wb_touchpad_drag_output output = enter_grace(state, now_ms);
+        if (output.actions != WB_DRAG_NONE) {
+            return output;
+        }
+    }
+
+    if (state->phase == WB_TOUCHPAD_GRACE) {
+        if (active_count == 3 && coordinates_complete) {
+            resume_at(state, sum_x / 3, sum_y / 3);
+        }
+        return no_output();
+    }
+
+    if (active_count != 3) {
+        if (state->phase == WB_TOUCHPAD_ARMED) {
+            enter_idle(state);
+        }
+        return no_output();
     }
     if (!coordinates_complete) {
-        if (composition_changed) {
-            state->phase = WB_TOUCHPAD_IDLE;
+        if (composition_changed && state->phase == WB_TOUCHPAD_ARMED) {
+            enter_idle(state);
         }
         return no_output();
     }
@@ -145,6 +252,7 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
             return no_output();
         }
         state->phase = WB_TOUCHPAD_DRAGGING;
+        state->button_down = true;
         started_dragging = true;
     }
 
@@ -152,10 +260,14 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
     int delta_y = center_y - state->last_y;
     state->last_x = center_x;
     state->last_y = center_y;
-    delta_x = delta_x * state->config.movement_numerator
-            / state->config.movement_denominator;
-    delta_y = delta_y * state->config.movement_numerator
-            / state->config.movement_denominator;
+    delta_x = scale_delta(delta_x,
+            state->config.movement_numerator,
+            state->config.movement_denominator,
+            &state->remainder_x);
+    delta_y = scale_delta(delta_y,
+            state->config.movement_numerator,
+            state->config.movement_denominator,
+            &state->remainder_y);
 
     struct wb_touchpad_drag_output output = {
         .actions = WB_DRAG_MOVE,
@@ -173,7 +285,7 @@ struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
 
 struct wb_touchpad_drag_output wb_touchpad_drag_cancel(
         struct wb_touchpad_drag_state *state) {
-    bool was_dragging = state->phase == WB_TOUCHPAD_DRAGGING;
+    bool was_pressed = state->button_down;
     reset_runtime(state);
-    return was_dragging ? release_output() : no_output();
+    return was_pressed ? release_output() : no_output();
 }

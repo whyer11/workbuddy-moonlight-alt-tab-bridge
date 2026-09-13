@@ -2,6 +2,7 @@
 #define WB_TOUCHPAD_DRAG_STATE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define WB_TOUCHPAD_MAX_SLOTS 8
 
@@ -16,6 +17,7 @@ struct wb_touchpad_drag_config {
     int activation_distance;
     int movement_numerator;
     int movement_denominator;
+    int continuation_ms;
 };
 
 struct wb_touchpad_drag_output {
@@ -27,7 +29,8 @@ struct wb_touchpad_drag_output {
 enum wb_touchpad_drag_phase {
     WB_TOUCHPAD_IDLE,
     WB_TOUCHPAD_ARMED,
-    WB_TOUCHPAD_DRAGGING
+    WB_TOUCHPAD_DRAGGING,
+    WB_TOUCHPAD_GRACE
 };
 
 struct wb_touchpad_slot {
@@ -47,6 +50,10 @@ struct wb_touchpad_drag_state {
     int start_y;
     int last_x;
     int last_y;
+    int64_t grace_deadline_ms;
+    long long remainder_x;
+    long long remainder_y;
+    bool button_down;
     bool composition_changed;
     struct wb_touchpad_drag_config config;
 };
@@ -58,7 +65,13 @@ void wb_touchpad_drag_set_tracking_id(struct wb_touchpad_drag_state *state, int 
 void wb_touchpad_drag_set_x(struct wb_touchpad_drag_state *state, int x);
 void wb_touchpad_drag_set_y(struct wb_touchpad_drag_state *state, int y);
 struct wb_touchpad_drag_output wb_touchpad_drag_finish_frame(
-        struct wb_touchpad_drag_state *state);
+        struct wb_touchpad_drag_state *state, int64_t now_ms);
+struct wb_touchpad_drag_output wb_touchpad_drag_tick(
+        struct wb_touchpad_drag_state *state, int64_t now_ms);
+int wb_touchpad_drag_next_timeout_ms(
+        const struct wb_touchpad_drag_state *state,
+        int64_t now_ms,
+        int fallback_ms);
 struct wb_touchpad_drag_output wb_touchpad_drag_cancel(
         struct wb_touchpad_drag_state *state);
 
