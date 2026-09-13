@@ -15,17 +15,23 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.IntConsumer;
 import local.workbuddy.alttab.adapters.SharedPreferencesComputerHostSettings;
+import local.workbuddy.alttab.adapters.SharedPreferencesGestureSettings;
 import local.workbuddy.alttab.adapters.ShizukuPadBridgeMonitor;
 import local.workbuddy.alttab.adapters.UdpComputerBridgeMonitor;
 import local.workbuddy.alttab.application.DashboardCoordinator;
 import local.workbuddy.alttab.domain.DashboardState;
 import local.workbuddy.alttab.domain.EndpointState;
+import local.workbuddy.alttab.domain.GestureConfig;
+import local.workbuddy.alttab.generated.GeneratedBridgeSchema;
+import local.workbuddy.alttab.ports.GestureSettings;
 
 public final class ProbeActivity extends Activity {
     private final Map<String, RuleCardViews> ruleCards = new LinkedHashMap<>();
@@ -36,12 +42,16 @@ public final class ProbeActivity extends Activity {
     private TextView versionStatus;
     private EditText computerHost;
     private Button activeToggle;
+    private GestureSettings gestureSettings;
+    private GestureConfig gestureConfig;
     private boolean bridgeActive = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        BridgeController.initialize(this);
+        gestureSettings = new SharedPreferencesGestureSettings(this);
+        gestureConfig = gestureSettings.load();
+        BridgeController.initialize(this, gestureConfig);
         handler = new Handler(Looper.getMainLooper());
         SharedPreferencesComputerHostSettings hostSettings =
                 new SharedPreferencesComputerHostSettings(this);
@@ -167,6 +177,8 @@ public final class ProbeActivity extends Activity {
                 14, Color.rgb(99, 110, 132));
         root.addView(hostHelp, matchWrapWithBottomMargin(22));
 
+        root.addView(createGestureSettingsCard(), matchWrapWithBottomMargin(22));
+
         TextView rulesTitle = text(getString(R.string.bridge_rules_title),
                 22, Color.rgb(23, 32, 51));
         rulesTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -181,6 +193,86 @@ public final class ProbeActivity extends Activity {
         versionStatus.setPadding(0, dp(8), 0, dp(12));
         root.addView(versionStatus);
         return scrollView;
+    }
+
+    private View createGestureSettingsCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(18), dp(16), dp(18), dp(16));
+        card.setElevation(dp(2));
+        setRoundedBackground(card, Color.WHITE, 16);
+
+        TextView title = text(getString(R.string.gesture_settings_title),
+                20, Color.rgb(23, 32, 51));
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        card.addView(title, matchWrapWithBottomMargin(10));
+
+        card.addView(createSteppedSlider(
+                getString(R.string.three_finger_speed),
+                "%",
+                GeneratedBridgeSchema.THREE_FINGER_SPEED_PERCENT_MIN,
+                GeneratedBridgeSchema.THREE_FINGER_SPEED_PERCENT_MAX,
+                GeneratedBridgeSchema.THREE_FINGER_SPEED_PERCENT_STEP,
+                gestureConfig.speedPercent(),
+                value -> saveGestureConfig(gestureConfig.withSpeedPercent(value))));
+
+        card.addView(createSteppedSlider(
+                getString(R.string.three_finger_continuation),
+                " ms",
+                GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_MIN,
+                GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_MAX,
+                GeneratedBridgeSchema.THREE_FINGER_CONTINUATION_MS_STEP,
+                gestureConfig.continuationMs(),
+                value -> saveGestureConfig(gestureConfig.withContinuationMs(value))));
+
+        TextView help = text(getString(R.string.gesture_moonlight_help),
+                14, Color.rgb(99, 110, 132));
+        help.setPadding(0, dp(6), 0, 0);
+        card.addView(help);
+        return card;
+    }
+
+    private View createSteppedSlider(String title,
+                                     String suffix,
+                                     int min,
+                                     int max,
+                                     int step,
+                                     int current,
+                                     IntConsumer onCommitted) {
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+
+        TextView valueLabel = text(title + "：" + current + suffix,
+                16, Color.rgb(44, 55, 77));
+        container.addView(valueLabel);
+
+        SeekBar seekBar = new SeekBar(this);
+        seekBar.setMax((max - min) / step);
+        seekBar.setProgress((current - min) / step);
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                valueLabel.setText(title + "：" + (min + progress * step) + suffix);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar bar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar bar) {
+                onCommitted.accept(min + bar.getProgress() * step);
+            }
+        });
+        container.addView(seekBar);
+        return container;
+    }
+
+    private void saveGestureConfig(GestureConfig next) {
+        gestureConfig = next;
+        gestureSettings.save(next);
+        BridgeController.setGestureConfig(next);
+        requestImmediateRefresh();
     }
 
     private View createRuleCard(BridgeRule rule) {

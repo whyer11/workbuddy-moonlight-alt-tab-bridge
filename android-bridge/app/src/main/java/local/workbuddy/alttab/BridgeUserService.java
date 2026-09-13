@@ -58,6 +58,12 @@ public final class BridgeUserService extends Binder {
             reply.writeNoException();
             return true;
         }
+        if (code == BridgeBinderProtocolV2.TRANSACTION_SET_GESTURE_CONFIG) {
+            data.enforceInterface(BridgeBinderProtocolV2.DESCRIPTOR);
+            supervisor.setGestureConfig(BridgeBinderProtocolV2.readGestureConfig(data));
+            reply.writeNoException();
+            return true;
+        }
         if (code == SHIZUKU_USER_SERVICE_DESTROY) {
             destroy();
             return true;

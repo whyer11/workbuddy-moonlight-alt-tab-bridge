@@ -11,5 +11,9 @@
     <string name="save_computer_host">保存</string>
     <string name="computer_host_saved">电脑地址已保存</string>
     <string name="computer_host_help">状态探测只读取版本和规则列表，不提供远程控制；按键串流不依赖此探测。</string>
+    <string name="gesture_settings_title">触控板手势</string>
+    <string name="three_finger_speed">三指拖动速度</string>
+    <string name="three_finger_continuation">三指续拖时间</string>
+    <string name="gesture_moonlight_help">续拖大于 0 ms 时请配合 Moonlight WorkBuddy 使用；切回官方 Moonlight 前请设为 0 ms。</string>
     <string name="bridge_rules_title">桥接规则</string>
 </resources>

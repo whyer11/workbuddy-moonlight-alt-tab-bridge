@@ -8,7 +8,10 @@ import android.os.IBinder;
 import android.os.Parcel;
 import android.util.Log;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import local.workbuddy.alttab.domain.BridgeEndpointSnapshot;
+import local.workbuddy.alttab.domain.GestureConfig;
 import local.workbuddy.alttab.shizuku.BridgeBinderProtocolV2;
 
 import rikka.shizuku.Shizuku;
@@ -20,6 +23,8 @@ public final class BridgeController {
     private static volatile boolean binding;
     private static volatile boolean connected;
     private static volatile IBinder bridgeBinder;
+    private static final AtomicReference<GestureConfig> DESIRED_GESTURE_CONFIG =
+            new AtomicReference<>(GestureConfig.defaults());
 
     private static final Shizuku.UserServiceArgs USER_SERVICE_ARGS =
             new Shizuku.UserServiceArgs(new ComponentName(
@@ -36,6 +41,7 @@ public final class BridgeController {
             binding = false;
             connected = true;
             Log.i(TAG, "Shizuku user service connected");
+            sendGestureConfig(service, DESIRED_GESTURE_CONFIG.get());
         }
 
         @Override
@@ -50,8 +56,13 @@ public final class BridgeController {
     private BridgeController() {
     }
 
-    public static synchronized void initialize(Context context) {
+    public static synchronized void initialize(Context context, GestureConfig initialConfig) {
+        DESIRED_GESTURE_CONFIG.set(initialConfig);
         if (initialized) {
+            IBinder binder = bridgeBinder;
+            if (connected && binder != null && binder.isBinderAlive()) {
+                sendGestureConfig(binder, initialConfig);
+            }
             return;
         }
         initialized = true;
@@ -168,6 +179,39 @@ public final class BridgeController {
             return true;
         } catch (Throwable error) {
             Log.w(TAG, "Cannot change native bridge state", error);
+            return false;
+        } finally {
+            reply.recycle();
+            data.recycle();
+        }
+    }
+
+    public static boolean setGestureConfig(GestureConfig config) {
+        DESIRED_GESTURE_CONFIG.set(config);
+        IBinder binder = bridgeBinder;
+        if (!connected || binder == null || !binder.isBinderAlive()) {
+            return false;
+        }
+        return sendGestureConfig(binder, config);
+    }
+
+    private static boolean sendGestureConfig(IBinder binder, GestureConfig config) {
+        Parcel data = Parcel.obtain();
+        Parcel reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(BridgeBinderProtocolV2.DESCRIPTOR);
+            BridgeBinderProtocolV2.writeGestureConfig(data, config);
+            if (!binder.transact(
+                    BridgeBinderProtocolV2.TRANSACTION_SET_GESTURE_CONFIG,
+                    data,
+                    reply,
+                    0)) {
+                return false;
+            }
+            reply.readException();
+            return true;
+        } catch (Throwable error) {
+            Log.w(TAG, "Cannot change gesture configuration", error);
             return false;
         } finally {
             reply.recycle();

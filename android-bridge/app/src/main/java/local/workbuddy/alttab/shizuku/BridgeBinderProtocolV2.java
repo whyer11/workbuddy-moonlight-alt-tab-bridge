@@ -6,12 +6,15 @@ import android.os.Parcel;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 
+import local.workbuddy.alttab.domain.GestureConfig;
 import local.workbuddy.alttab.nativebridge.NativeBridgeStatus;
 
 public final class BridgeBinderProtocolV2 {
     public static final String DESCRIPTOR = "local.workbuddy.alttab.bridge.v2";
     public static final int TRANSACTION_STATUS = IBinder.FIRST_CALL_TRANSACTION;
     public static final int TRANSACTION_SET_ACTIVE = IBinder.FIRST_CALL_TRANSACTION + 1;
+    public static final int TRANSACTION_SET_GESTURE_CONFIG =
+            IBinder.FIRST_CALL_TRANSACTION + 2;
 
     private BridgeBinderProtocolV2() {}
 
@@ -36,6 +39,15 @@ public final class BridgeBinderProtocolV2 {
         return new Snapshot(ready, version, protocol,
                 new LinkedHashSet<>(rules == null ? new ArrayList<>() : rules),
                 physical, error, active);
+    }
+
+    public static void writeGestureConfig(Parcel data, GestureConfig config) {
+        data.writeInt(config.speedPercent());
+        data.writeInt(config.continuationMs());
+    }
+
+    public static GestureConfig readGestureConfig(Parcel data) {
+        return GestureConfig.normalized(data.readInt(), data.readInt());
     }
 
     public static final class Snapshot {
