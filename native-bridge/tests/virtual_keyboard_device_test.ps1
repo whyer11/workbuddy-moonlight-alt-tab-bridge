@@ -41,7 +41,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 foreach ($requiredKey in @(
     'KEY_UP', 'KEY_DOWN', 'KEY_LEFT', 'KEY_RIGHT',
-    'KEY_LEFTALT', 'KEY_TAB', 'KEY_F12'
+    'KEY_LEFTALT', 'KEY_TAB', 'KEY_F12', 'KEY_SCROLLLOCK'
 )) {
     if ($capabilities -notmatch "\b$requiredKey\b") {
         throw "Virtual keyboard is missing required capability: $requiredKey"
