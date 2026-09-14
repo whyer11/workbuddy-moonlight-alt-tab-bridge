@@ -1,3 +1,6 @@
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
 #define _WIN32_IE 0x0600
 
 #include "HostTrayIcon.h"
@@ -157,7 +160,20 @@ bool wb_host_tray_start(struct wb_host_tray *tray, HINSTANCE instance,
         return false;
     }
 
-    tray->icon = LoadIconW(NULL, MAKEINTRESOURCEW(IDI_APPLICATION));
+    tray->icon = (HICON)LoadImageW(instance, MAKEINTRESOURCEW(IDI_HOST),
+            IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+    if (tray->icon == NULL) {
+        UINT dpi = 96;
+        HWND desktop = GetDesktopWindow();
+        if (desktop != NULL) {
+            dpi = GetDpiForWindow(desktop);
+            if (dpi == 0) dpi = 96;
+        }
+        int sm_cx = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+        if (sm_cx <= 0) sm_cx = GetSystemMetrics(SM_CXSMICON);
+        tray->icon = (HICON)LoadImageW(instance, MAKEINTRESOURCEW(IDI_HOST),
+                IMAGE_ICON, sm_cx, sm_cx, LR_SHARED);
+    }
     if (tray->icon == NULL) {
         DestroyWindow(tray->window);
         tray->window = NULL;

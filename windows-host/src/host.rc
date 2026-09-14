@@ -1,0 +1,7 @@
+#include <windows.h>
+
+#define IDI_HOST 101
+
+IDI_HOST ICON "../assets/workbuddy-host.ico"
+
+1 RT_MANIFEST "host.manifest"

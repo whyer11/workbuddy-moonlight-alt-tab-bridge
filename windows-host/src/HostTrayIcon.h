@@ -4,6 +4,10 @@
 #include <windows.h>
 #include <stdbool.h>
 
+#ifndef IDI_HOST
+#define IDI_HOST 101
+#endif
+
 enum wb_tray_command {
     WB_TRAY_CMD_NONE = 0,
     WB_TRAY_CMD_TOGGLE_PAUSE = 1001,

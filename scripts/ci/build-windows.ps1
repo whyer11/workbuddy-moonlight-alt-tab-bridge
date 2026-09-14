@@ -106,13 +106,23 @@ if (-not $SkipInteractiveTests) {
 }
 
 $hostExe = Join-Path $packageDir 'WorkBuddyAltTabHost.exe'
+$resourceObject = Join-Path $packageDir 'host_rc.o'
+$windres = Get-Command windres -ErrorAction SilentlyContinue
+if ($null -eq $windres) {
+    throw 'windres was not found; MinGW-w64 binutils is required for tray icon resources'
+}
+& windres 'windows-host\src\host.rc' -O coff -o $resourceObject
+if ($LASTEXITCODE -ne 0) {
+    throw "windres failed with exit code $LASTEXITCODE"
+}
 Invoke-Compiler -Arguments (@(
     'windows-host\src\WorkBuddyAltTabHost.c',
     'windows-host\src\HostApplication.c',
     'windows-host\src\HostTrayIcon.c',
     'windows-host\src\KeyboardBridgeCore.c',
     'windows-host\src\WorkBuddyStatusProtocol.c',
-    'windows-host\src\WorkBuddyStatusServer.c'
+    'windows-host\src\WorkBuddyStatusServer.c',
+    $resourceObject
 ) + $commonFlags + @('-municode', '-mwindows', '-o', $hostExe, '-luser32', '-lws2_32', '-lshell32'))
 
 Invoke-TestExecutable -Path $hostExe -Arguments @('--self-test')
