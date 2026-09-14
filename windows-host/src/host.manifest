@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity version="0.9.1.0" name="WorkBuddy.AltTab.Host" type="win32"/>
+  <assemblyIdentity version="0.9.2.0" name="WorkBuddy.AltTab.Host" type="win32"/>
   <description>WorkBuddy Alt+Tab Bridge Windows Host</description>
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>

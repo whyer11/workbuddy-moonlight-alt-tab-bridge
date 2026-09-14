@@ -15,7 +15,7 @@
 
 ## 当前安装状态
 
-- Pad 应用：WorkBuddy Alt+Tab 0.9.1（`local.workbuddy.alttab`）
+- Pad 应用：WorkBuddy Alt+Tab 0.9.2（`local.workbuddy.alttab`）
 - Shizuku：13.6.0，ADB 模式，已授予 WorkBuddy 永久权限
 - Pad 自启动：Shizuku 与 WorkBuddy Alt+Tab 均已允许
 - Windows 程序：WorkBuddy Host 0.7.0，位于 `%LOCALAPPDATA%\WorkBuddyAltTab\WorkBuddyAltTabHost.exe`
@@ -31,7 +31,7 @@ Shizuku 13.6.0 在 Android 13 及以上、已授予 `WRITE_SECURE_SETTINGS` 且�
 
 状态页会分别显示“已配置”“Pad 端运行中”和“电脑端运行中”。方向键与三指拖动只依赖 Pad 桥接，因此会显示“电脑端无需桥接”。健康时每五秒刷新，异常时每两秒刷新；Pad 与电脑探测互相隔离，状态通道失败不会停止输入核心。页面提供“暂停键盘拦截/恢复键盘拦截”开关，便于临时释放实体键盘和虚拟鼠标。“触控板手势”区域可调整三指速度、续拖时间和 `0–500 ms` 的三指落下容错；容错步长为 `1 ms`，滑块松手后立即生效并持久化。
 
-0.9.1 使用 `protocol/bridge-schema.json` 作为 Java、Pad 原生程序和 Windows Host 的唯一版本、规则与手势配置来源。Pad 更新采用 `.new` 暂存、哈希与 `--describe` 能力校验、`.previous` 备份和失败回滚；Windows 键盘核心与 UDP 状态服务分离，即使 UDP 57420 被占用，按键桥接仍会启动。
+0.9.2 使用 `protocol/bridge-schema.json` 作为 Java、Pad 原生程序和 Windows Host 的唯一版本、规则与手势配置来源。Pad 更新采用 `.new` 暂存、哈希与 `--describe` 能力校验、`.previous` 备份和失败回滚；Windows 键盘核心与 UDP 状态服务分离，即使 UDP 57420 被占用，按键桥接仍会启动。
 
 若快捷键或状态异常：
 

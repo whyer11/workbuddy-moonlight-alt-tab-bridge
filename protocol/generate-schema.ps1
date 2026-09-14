@@ -3,7 +3,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$schema = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'bridge-schema.json') | ConvertFrom-Json
+$schema = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $PSScriptRoot 'bridge-schema.json') | ConvertFrom-Json
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 
 function Escape-Java([string]$value) {
