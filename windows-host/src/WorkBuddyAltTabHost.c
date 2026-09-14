@@ -3,6 +3,7 @@
 #include "WorkBuddyStatusServer.h"
 #include "KeyboardBridgeCore.h"
 #include "HostApplication.h"
+#include "HostTrayIcon.h"
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -55,9 +56,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
         return probe_only ? 4 : 0;
     }
 
+    struct wb_host_tray tray;
+    if (!wb_host_tray_start(&tray, instance, L"WorkBuddy Alt+Tab 桥接")) {
+        write_log(L"TRAY_START_FAILED error=%lu", GetLastError());
+        CloseHandle(mutex);
+        return 5;
+    }
+
     struct wb_host_application application;
-    if (!wb_host_application_start(&application, instance, WB_STATUS_PORT)) {
+    if (!wb_host_application_start(&application, instance,
+            wb_host_tray_window(&tray), WB_STATUS_PORT)) {
         write_log(L"KEYBOARD_CORE_FAILED error=%lu", GetLastError());
+        wb_host_tray_stop(&tray);
         CloseHandle(mutex); return 2;
     }
 
@@ -65,23 +75,50 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
     UINT_PTR status_retry_timer = 0;
     if (!status_ready) {
         write_log(L"STATUS_DEGRADED port=%u error=%lu", WB_STATUS_PORT, WSAGetLastError());
-        status_retry_timer = SetTimer(NULL, STATUS_RETRY_TIMER, 5000, NULL);
+        status_retry_timer = SetTimer(wb_host_tray_window(&tray),
+                STATUS_RETRY_TIMER, 5000, NULL);
     }
 
     if (probe_only) {
         write_log(L"PROBE_OK core=ready status=%ls", status_ready ? L"ready" : L"degraded");
-        wb_host_application_stop(&application); CloseHandle(mutex); return 0;
+        wb_host_application_stop(&application);
+        wb_host_tray_stop(&tray);
+        CloseHandle(mutex); return 0;
     }
 
-    write_log(L"HOST_READY version=%hs protocol=%d core=ready status=%ls",
+    write_log(L"HOST_READY version=%hs protocol=%d core=ready status=%ls tray=ready",
             WB_SCHEMA_PRODUCT_VERSION, WB_SCHEMA_PROTOCOL_VERSION,
             status_ready ? L"ready" : L"degraded");
+
     MSG message; int result;
     while ((result = GetMessageW(&message, NULL, 0, 0)) > 0) {
+        enum wb_tray_command tray_command = WB_TRAY_CMD_NONE;
+        if (wb_host_tray_handle_message(&tray, &message, &tray_command)
+                && tray_command != WB_TRAY_CMD_NONE) {
+            if (tray_command == WB_TRAY_CMD_EXIT) {
+                write_log(L"TRAY_EXIT");
+                PostQuitMessage(0);
+                continue;
+            }
+            if (tray_command == WB_TRAY_CMD_OPEN_LOG_DIR) {
+                wb_host_tray_open_log_directory();
+                write_log(L"TRAY_OPEN_LOG");
+                continue;
+            }
+            if (tray_command == WB_TRAY_CMD_TOGGLE_PAUSE) {
+                bool paused = !wb_keyboard_core_is_paused(&application.keyboard);
+                if (wb_host_application_set_paused(&application, paused)) {
+                    wb_host_tray_set_paused(&tray, paused);
+                    write_log(paused ? L"TRAY_PAUSED" : L"TRAY_RESUMED");
+                }
+                continue;
+            }
+        }
+
         if (message.message == WM_TIMER && status_retry_timer != 0
                 && message.wParam == status_retry_timer
                 && wb_host_application_retry_status(&application)) {
-            KillTimer(NULL, status_retry_timer);
+            KillTimer(wb_host_tray_window(&tray), status_retry_timer);
             status_retry_timer = 0;
             write_log(L"STATUS_RECOVERED port=%u", WB_STATUS_PORT);
             continue;
@@ -89,8 +126,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
         if (wb_host_application_handle_message(&application, &message))
             write_log(L"HOTKEY_TRIGGERED send=TAB_OK");
     }
-    if (status_retry_timer != 0) KillTimer(NULL, status_retry_timer);
-    wb_host_application_stop(&application); CloseHandle(mutex);
+    if (status_retry_timer != 0) KillTimer(wb_host_tray_window(&tray), status_retry_timer);
+    wb_host_application_stop(&application);
+    wb_host_tray_stop(&tray);
+    CloseHandle(mutex);
     write_log(L"HOST_STOPPED result=%d", result);
     return result < 0 ? 3 : 0;
 }

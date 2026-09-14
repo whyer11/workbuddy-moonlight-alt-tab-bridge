@@ -13,10 +13,13 @@ struct wb_host_application {
 };
 
 bool wb_host_application_start(struct wb_host_application *application,
-                               HINSTANCE instance, unsigned short status_port);
+                               HINSTANCE instance, HWND message_window,
+                               unsigned short status_port);
 bool wb_host_application_handle_message(struct wb_host_application *application,
                                         const MSG *message);
 bool wb_host_application_retry_status(struct wb_host_application *application);
+bool wb_host_application_set_paused(struct wb_host_application *application,
+                                    bool paused);
 void wb_host_application_stop(struct wb_host_application *application);
 
 #endif

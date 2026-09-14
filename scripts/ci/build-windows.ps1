@@ -95,14 +95,25 @@ foreach ($firewallTest in @(
     }
 }
 
+$pauseTest = Join-Path $testsDir 'BridgePauseIntegrationTest.exe'
+Invoke-Compiler -Arguments (@(
+    'windows-host\tests\BridgePauseIntegrationTest.c',
+    'windows-host\src\KeyboardBridgeCore.c'
+) + $commonFlags + @('-o', $pauseTest, '-luser32'))
+
+if (-not $SkipInteractiveTests) {
+    Invoke-TestExecutable -Path $pauseTest
+}
+
 $hostExe = Join-Path $packageDir 'WorkBuddyAltTabHost.exe'
 Invoke-Compiler -Arguments (@(
     'windows-host\src\WorkBuddyAltTabHost.c',
     'windows-host\src\HostApplication.c',
+    'windows-host\src\HostTrayIcon.c',
     'windows-host\src\KeyboardBridgeCore.c',
     'windows-host\src\WorkBuddyStatusProtocol.c',
     'windows-host\src\WorkBuddyStatusServer.c'
-) + $commonFlags + @('-municode', '-mwindows', '-o', $hostExe, '-luser32', '-lws2_32'))
+) + $commonFlags + @('-municode', '-mwindows', '-o', $hostExe, '-luser32', '-lws2_32', '-lshell32'))
 
 Invoke-TestExecutable -Path $hostExe -Arguments @('--self-test')
 

@@ -27,7 +27,7 @@ static bool send_win_key(bool down) {
 
 static LRESULT CALLBACK keyboard_hook_proc(int code, WPARAM message, LPARAM data) {
     struct wb_keyboard_core *core = active_core;
-    if (core != NULL && code == HC_ACTION) {
+    if (core != NULL && code == HC_ACTION && !core->paused) {
         const KBDLLHOOKSTRUCT *event = (const KBDLLHOOKSTRUCT *)data;
         if (event->vkCode == VK_SCROLL && event->dwExtraInfo != WORKBUDDY_SYNTH_TAG) {
             bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
@@ -45,23 +45,45 @@ static LRESULT CALLBACK keyboard_hook_proc(int code, WPARAM message, LPARAM data
     return CallNextHookEx(core == NULL ? NULL : core->keyboard_hook, code, message, data);
 }
 
-bool wb_keyboard_core_start(struct wb_keyboard_core *core, HINSTANCE instance) {
-    if (core == NULL || active_core != NULL) return false;
+bool wb_keyboard_core_start(struct wb_keyboard_core *core, HINSTANCE instance,
+                            HWND message_window) {
+    if (core == NULL || active_core != NULL || message_window == NULL) return false;
     ZeroMemory(core, sizeof(*core));
     core->instance = instance;
-    if (!RegisterHotKey(NULL, HOTKEY_ALT_F12, MOD_ALT | MOD_NOREPEAT, VK_F12)) return false;
+    core->message_window = message_window;
+    if (!RegisterHotKey(message_window, HOTKEY_ALT_F12, MOD_ALT | MOD_NOREPEAT, VK_F12)) {
+        return false;
+    }
     core->hotkey_registered = true;
     active_core = core;
     core->keyboard_hook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboard_hook_proc, instance, 0);
     if (core->keyboard_hook == NULL) {
-        active_core = NULL; UnregisterHotKey(NULL, HOTKEY_ALT_F12);
-        core->hotkey_registered = false; return false;
+        active_core = NULL;
+        UnregisterHotKey(message_window, HOTKEY_ALT_F12);
+        core->hotkey_registered = false;
+        core->message_window = NULL;
+        return false;
     }
     return true;
 }
 
+bool wb_keyboard_core_set_paused(struct wb_keyboard_core *core, bool paused) {
+    if (core == NULL || !core->hotkey_registered) return false;
+    if (core->paused == paused) return true;
+    core->paused = paused;
+    if (paused && core->win_key_down) {
+        send_win_key(false);
+        core->win_key_down = false;
+    }
+    return true;
+}
+
+bool wb_keyboard_core_is_paused(const struct wb_keyboard_core *core) {
+    return core != NULL && core->paused;
+}
+
 bool wb_keyboard_core_handle_message(struct wb_keyboard_core *core, const MSG *message) {
-    if (core == NULL || message == NULL) return false;
+    if (core == NULL || message == NULL || core->paused) return false;
     if (message->message == WM_HOTKEY && message->wParam == HOTKEY_ALT_F12) return send_tab();
     return false;
 }
@@ -70,7 +92,9 @@ void wb_keyboard_core_stop(struct wb_keyboard_core *core) {
     if (core == NULL) return;
     if (core->win_key_down) { send_win_key(false); core->win_key_down = false; }
     if (core->keyboard_hook != NULL) UnhookWindowsHookEx(core->keyboard_hook);
-    if (core->hotkey_registered) UnregisterHotKey(NULL, HOTKEY_ALT_F12);
+    if (core->hotkey_registered && core->message_window != NULL) {
+        UnregisterHotKey(core->message_window, HOTKEY_ALT_F12);
+    }
     if (active_core == core) active_core = NULL;
     ZeroMemory(core, sizeof(*core));
 }
