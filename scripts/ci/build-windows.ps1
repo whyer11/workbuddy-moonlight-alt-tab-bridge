@@ -16,6 +16,7 @@ if ($null -eq (Get-Command $Compiler -ErrorAction SilentlyContinue)) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location -LiteralPath $repoRoot
+$productVersion = (Get-Content -LiteralPath 'protocol\bridge-schema.json' -Raw | ConvertFrom-Json).productVersion
 
 $outputRoot = Join-Path $repoRoot 'build\ci\windows'
 $testsDir = Join-Path $outputRoot 'tests'
@@ -163,7 +164,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 $versionText = @"
 WorkBuddy Bridge Windows Host
-Version: $Version
+Version: $productVersion
 Git commit: $commit
 Architecture: x86_64
 Authenticode: unsigned
@@ -173,6 +174,9 @@ Authenticode: unsigned
     $versionText.Replace("`r`n", "`n"),
     [Text.UTF8Encoding]::new($false)
 )
+
+& pwsh -NoProfile -File 'windows-host\tests\WindowsPackageTest.ps1' -PackageDirectory $packageDir
+if ($LASTEXITCODE -ne 0) { throw 'Windows package validation failed' }
 
 $zipPath = Join-Path $outputRoot "WorkBuddy-Bridge-Windows-$Version.zip"
 Compress-Archive -Path (Join-Path $packageDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
