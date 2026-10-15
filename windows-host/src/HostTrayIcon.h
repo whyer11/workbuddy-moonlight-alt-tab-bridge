@@ -12,7 +12,9 @@ enum wb_tray_command {
     WB_TRAY_CMD_NONE = 0,
     WB_TRAY_CMD_TOGGLE_PAUSE = 1001,
     WB_TRAY_CMD_OPEN_LOG_DIR = 1002,
-    WB_TRAY_CMD_EXIT = 1003
+    WB_TRAY_CMD_EXIT = 1003,
+    WB_TRAY_CMD_TOGGLE_AUTOSTART = 1004,
+    WB_TRAY_CMD_SHOW_MENU = 1005
 };
 
 struct wb_host_tray {
@@ -21,12 +23,17 @@ struct wb_host_tray {
     UINT taskbar_created_message;
     bool icon_added;
     bool bridge_paused;
+    bool autostart_enabled;
+    bool autostart_available;
 };
 
 bool wb_host_tray_start(struct wb_host_tray *tray, HINSTANCE instance,
                         const wchar_t *tooltip);
 HWND wb_host_tray_window(const struct wb_host_tray *tray);
 void wb_host_tray_set_paused(struct wb_host_tray *tray, bool paused);
+void wb_host_tray_set_autostart(struct wb_host_tray *tray, bool enabled,
+                               bool available);
+void wb_host_tray_show_menu(struct wb_host_tray *tray);
 bool wb_host_tray_handle_message(struct wb_host_tray *tray, const MSG *message,
                                  enum wb_tray_command *out_command);
 void wb_host_tray_stop(struct wb_host_tray *tray);

@@ -13,13 +13,13 @@
 
 按键桥接链路不使用辅助功能、不经过网络控制协议，也不修改 Moonlight 或 Sunshine。状态接口只接受带随机 nonce 的 `WB_STATUS_V2` 查询，只返回版本、协议、核心状态和规则 ID，不提供按键注入或其他控制能力。底层程序只输出启动、停止和发生映射的事件，不记录普通键内容。
 
-## 当前安装状态
+## 安装与运行约定
 
-- Pad 应用：WorkBuddy Alt+Tab 0.9.2（`local.workbuddy.alttab`）
+- 产品版本：WorkBuddy Bridge 0.9.3；Pad 应用标识为 `local.workbuddy.alttab`，Windows Host 可单独升级，继续兼容协议 V2 的旧版 Pad 应用。
 - Shizuku：13.6.0，ADB 模式，已授予 WorkBuddy 永久权限
 - Pad 自启动：Shizuku 与 WorkBuddy Alt+Tab 均已允许
-- Windows 程序：WorkBuddy Host 0.7.0，位于 `%LOCALAPPDATA%\WorkBuddyAltTab\WorkBuddyAltTabHost.exe`
-- Windows 登录启动：`HKCU\Software\Microsoft\Windows\CurrentVersion\Run\WorkBuddyAltTabHost`
+- Windows 程序：WorkBuddy Host，安装在 `%LOCALAPPDATA%\WorkBuddyAltTab\WorkBuddyAltTabHost.exe`
+- Windows 登录启动：当前用户交互会话的计划任务 `WorkBuddyAltTabHost`，登录后延迟 15 秒，失败后每分钟重试，最多 3 次。
 - Windows 状态接口：UDP 57420，仅允许 Tailscale 网段 `100.64.0.0/10` 入站
 - HyperOS“切换应用 Alt Tab”：保持关闭
 
@@ -27,11 +27,21 @@ Shizuku 13.6.0 在 Android 13 及以上、已授予 `WRITE_SECURE_SETTINGS` 且�
 
 ## 使用与检查
 
+下载并完整解压 Windows ZIP，在解压目录运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+安装器默认启用开机自启动，并立即启动桥接。旧程序和日志会保存在安装目录的 `backups` 子目录。右键系统托盘的 WorkBuddy 图标，可以勾选或取消“开机自启动”，也可以暂停桥接、打开日志或退出程序。自启实际在当前用户登录后执行，无需管理员权限。
+
+安装时传入 `-NoAutoStart` 可关闭自启；传入 `-NoStart` 则不立即运行。命令行 `--enable-autostart`、`--disable-autostart` 切换同一个计划任务；`--autostart-status` 以退出码 `0` 表示启用、`10` 表示关闭，其他值表示查询失败。安装器和托盘不会各创建一套自启；成功配置后会移除本产品的旧 Run 登录项。
+
 正常情况下不需要手动操作。Pad 重启后保持连接常用 Wi-Fi，打开 Moonlight 串流即可。首次使用状态页时，在“电脑端实时状态”中填写电脑的 Tailscale IPv4 或 MagicDNS 名称并保存；该地址只存放在应用私有配置中。
 
 状态页会分别显示“已配置”“Pad 端运行中”和“电脑端运行中”。方向键与三指拖动只依赖 Pad 桥接，因此会显示“电脑端无需桥接”。健康时每五秒刷新，异常时每两秒刷新；Pad 与电脑探测互相隔离，状态通道失败不会停止输入核心。页面提供“暂停键盘拦截/恢复键盘拦截”开关，便于临时释放实体键盘和虚拟鼠标。“触控板手势”区域可调整三指速度、续拖时间和 `0–500 ms` 的三指落下容错；容错步长为 `1 ms`，滑块松手后立即生效并持久化。
 
-0.9.2 使用 `protocol/bridge-schema.json` 作为 Java、Pad 原生程序和 Windows Host 的唯一版本、规则与手势配置来源。Pad 更新采用 `.new` 暂存、哈希与 `--describe` 能力校验、`.previous` 备份和失败回滚；Windows 键盘核心与 UDP 状态服务分离，即使 UDP 57420 被占用，按键桥接仍会启动。
+0.9.3 使用 `protocol/bridge-schema.json` 作为 Java、Pad 原生程序和 Windows Host 的唯一版本、规则与手势配置来源。Pad 更新采用 `.new` 暂存、哈希与 `--describe` 能力校验、`.previous` 备份和失败回滚；Windows 键盘核心与 UDP 状态服务分离，即使 UDP 57420 被占用，按键桥接仍会启动。
 
 若快捷键或状态异常：
 
@@ -49,10 +59,10 @@ GitHub Actions 会在普通提交和 Pull Request 上重新编译并测试 Pad �
 - `WorkBuddy-Bridge-Windows-<version>.zip`
 - `SHA256SUMS.txt`
 
-Windows ZIP 包含后台程序 `WorkBuddyAltTabHost.exe`、状态防火墙脚本和版本说明。该 EXE 当前没有 Authenticode 商业代码签名；APK 使用 WorkBuddy Bridge 专用长期证书签名。
+Windows ZIP 包含托盘程序 `WorkBuddyAltTabHost.exe`、默认启用自启的 `install.ps1`、状态防火墙脚本和版本说明。该 EXE 当前没有 Authenticode 商业代码签名；APK 使用 WorkBuddy Bridge 专用长期证书签名。
 
 `0.9.1` 之前安装到 Pad 的版本使用本地测试证书，因此第一次迁移到 GitHub 正式版时必须先卸载旧 APK，再安装正式 APK并重新授予 Shizuku 权限。完成这一次迁移后，后续正式版本可以原位升级。发布维护顺序固定为：同步修改协议/原生/Android 版本，等待分支 CI 通过，再创建并推送 `v${versionName}` 标签。已存在的标签或 Release 不允许覆盖。
 
 ## 回滚
 
-Pad 原生程序的上一版本保存在 `/data/local/tmp/alttab_evdev_bridge.previous`；Windows 0.6.0 备份为 `%LOCALAPPDATA%\WorkBuddyAltTab\WorkBuddyAltTabHost-0.6.0-backup.exe`。完整卸载时，可卸载 Pad 上的 `WorkBuddy Alt+Tab` 和 Shizuku；删除 Windows 登录项 `WorkBuddyAltTabHost`，结束同名进程，并删除 `%LOCALAPPDATA%\WorkBuddyAltTab`。如需同时清理状态接口，可删除名为 `WorkBuddy Bridge Status (Tailscale)` 的 Windows 防火墙规则。回滚不会改动 Moonlight、Sunshine、Tailscale 或串流显示配置。
+Pad 原生程序的上一版本保存在 `/data/local/tmp/alttab_evdev_bridge.previous`；Windows 安装器将旧 EXE 和版本说明备份在 `%LOCALAPPDATA%\WorkBuddyAltTab\backups`。回滚 Windows 时先退出托盘程序，再从所需备份目录恢复 EXE 和版本说明。完整卸载前运行 `WorkBuddyAltTabHost.exe --disable-autostart`，然后退出程序并删除安装目录；如需同时清理状态接口，可删除名为 `WorkBuddy Bridge Status (Tailscale)` 的 Windows 防火墙规则。Pad 上可单独卸载 WorkBuddy 和 Shizuku。回滚不会改动 Moonlight、Sunshine、Tailscale 或串流显示配置。

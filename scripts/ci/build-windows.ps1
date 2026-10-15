@@ -1,7 +1,8 @@
 param(
     [string] $Compiler = 'gcc',
     [string] $Version = $env:RELEASE_VERSION,
-    [switch] $SkipInteractiveTests
+    [switch] $SkipInteractiveTests,
+    [switch] $RunAutostartIntegrationTests
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,9 +47,22 @@ function Invoke-TestExecutable {
         [string[]] $Arguments = @()
     )
 
-    & $Path @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Test failed with exit code $LASTEXITCODE`: $Path"
+    $stdout = "$Path.stdout.txt"
+    $stderr = "$Path.stderr.txt"
+    $startOptions = @{
+        FilePath = $Path
+        WindowStyle = 'Hidden'
+        Wait = $true
+        PassThru = $true
+        RedirectStandardOutput = $stdout
+        RedirectStandardError = $stderr
+    }
+    if ($Arguments.Count -gt 0) { $startOptions.ArgumentList = $Arguments }
+    $process = Start-Process @startOptions
+    Get-Content -LiteralPath $stdout -ErrorAction SilentlyContinue
+    Get-Content -LiteralPath $stderr -ErrorAction SilentlyContinue
+    if ($process.ExitCode -ne 0) {
+        throw "Test failed with exit code $($process.ExitCode): $Path"
     }
 }
 
@@ -87,7 +101,8 @@ Invoke-TestExecutable -Path $statusServerTest
 foreach ($firewallTest in @(
     'windows-host\tests\FirewallSpecTest.ps1',
     'windows-host\tests\FirewallApplySuccessTest.ps1',
-    'windows-host\tests\FirewallApplyFailureTest.ps1'
+    'windows-host\tests\FirewallApplyFailureTest.ps1',
+    'windows-host\tests\InstallerTest.ps1'
 )) {
     & pwsh -NoProfile -File $firewallTest
     if ($LASTEXITCODE -ne 0) {
@@ -106,7 +121,16 @@ if (-not $SkipInteractiveTests) {
 }
 
 $hostExe = Join-Path $packageDir 'WorkBuddyAltTabHost.exe'
-$resourceObject = Join-Path $packageDir 'host_rc.o'
+$autostartTest = Join-Path $testsDir 'HostAutostartIntegrationTest.exe'
+Invoke-Compiler -Arguments (@(
+    'windows-host\tests\HostAutostartIntegrationTest.c',
+    'windows-host\src\HostAutostart.c'
+) + $commonFlags + @('-o', $autostartTest, '-lole32', '-loleaut32', '-luuid', '-ladvapi32'))
+if ($RunAutostartIntegrationTests) {
+    Invoke-TestExecutable -Path $autostartTest -Arguments @('--live')
+}
+
+$resourceObject = Join-Path $outputRoot 'host_rc.o'
 $windres = Get-Command windres -ErrorAction SilentlyContinue
 if ($null -eq $windres) {
     throw 'windres was not found; MinGW-w64 binutils is required for tray icon resources'
@@ -119,15 +143,20 @@ Invoke-Compiler -Arguments (@(
     'windows-host\src\WorkBuddyAltTabHost.c',
     'windows-host\src\HostApplication.c',
     'windows-host\src\HostTrayIcon.c',
+    'windows-host\src\HostAutostart.c',
     'windows-host\src\KeyboardBridgeCore.c',
     'windows-host\src\WorkBuddyStatusProtocol.c',
     'windows-host\src\WorkBuddyStatusServer.c',
     $resourceObject
-) + $commonFlags + @('-municode', '-mwindows', '-o', $hostExe, '-luser32', '-lws2_32', '-lshell32'))
+) + $commonFlags + @('-municode', '-mwindows', '-o', $hostExe, '-luser32', '-lws2_32', '-lshell32', '-lole32', '-loleaut32', '-luuid', '-ladvapi32'))
 
 Invoke-TestExecutable -Path $hostExe -Arguments @('--self-test')
+foreach ($testLog in @("$hostExe.stdout.txt", "$hostExe.stderr.txt")) {
+    Move-Item -LiteralPath $testLog -Destination $testsDir -Force
+}
 
 Copy-Item -LiteralPath 'windows-host\install-status-firewall.ps1' -Destination $packageDir
+Copy-Item -LiteralPath 'windows-host\install.ps1' -Destination $packageDir
 $commit = (& git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) {
     throw 'Unable to resolve Git commit for VERSION.txt'

@@ -71,7 +71,10 @@ static void remove_icon(struct wb_host_tray *tray) {
     tray->icon_added = false;
 }
 
-static void show_menu(struct wb_host_tray *tray) {
+void wb_host_tray_show_menu(struct wb_host_tray *tray) {
+    if (tray == NULL || tray->window == NULL) {
+        return;
+    }
     HMENU menu = CreatePopupMenu();
     if (menu == NULL) {
         return;
@@ -83,14 +86,26 @@ static void show_menu(struct wb_host_tray *tray) {
     AppendMenuW(menu, MF_STRING, WB_TRAY_CMD_TOGGLE_PAUSE,
             tray->bridge_paused ? L"恢复桥接" : L"暂停桥接");
     AppendMenuW(menu, MF_STRING, WB_TRAY_CMD_OPEN_LOG_DIR, L"打开日志目录");
+    UINT autostart_flags = MF_STRING;
+    if (!tray->autostart_available) {
+        autostart_flags |= MF_GRAYED;
+    } else if (tray->autostart_enabled) {
+        autostart_flags |= MF_CHECKED;
+    }
+    AppendMenuW(menu, autostart_flags, WB_TRAY_CMD_TOGGLE_AUTOSTART,
+            tray->autostart_available ? L"开机自启动" : L"开机自启动（状态读取失败）");
     AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(menu, MF_STRING, WB_TRAY_CMD_EXIT, L"退出");
 
     POINT cursor;
     GetCursorPos(&cursor);
     SetForegroundWindow(tray->window);
-    TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, cursor.x, cursor.y,
-            0, tray->window, NULL);
+    UINT command = (UINT)TrackPopupMenu(menu,
+            TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_RETURNCMD | TPM_NONOTIFY,
+            cursor.x, cursor.y, 0, tray->window, NULL);
+    if (command != 0) {
+        PostMessageW(tray->window, WM_COMMAND, command, 0);
+    }
     PostMessageW(tray->window, WM_NULL, 0, 0);
     DestroyMenu(menu);
 }
@@ -118,7 +133,7 @@ static LRESULT CALLBACK tray_window_proc(HWND window, UINT message,
         if (event == WM_CONTEXTMENU || event == WM_RBUTTONUP
                 || event == WM_LBUTTONUP || event == WM_LBUTTONDBLCLK
                 || event == NIN_SELECT || event == NIN_KEYSELECT) {
-            show_menu(tray);
+            PostMessageW(window, WM_COMMAND, WB_TRAY_CMD_SHOW_MENU, 0);
         }
         return 0;
     }
@@ -200,6 +215,15 @@ void wb_host_tray_set_paused(struct wb_host_tray *tray, bool paused) {
     update_tooltip(tray, L"WorkBuddy Alt+Tab 桥接");
 }
 
+void wb_host_tray_set_autostart(struct wb_host_tray *tray, bool enabled,
+                               bool available) {
+    if (tray == NULL) {
+        return;
+    }
+    tray->autostart_enabled = enabled;
+    tray->autostart_available = available;
+}
+
 bool wb_host_tray_handle_message(struct wb_host_tray *tray, const MSG *message,
                                  enum wb_tray_command *out_command) {
     if (out_command != NULL) {
@@ -214,6 +238,8 @@ bool wb_host_tray_handle_message(struct wb_host_tray *tray, const MSG *message,
     int command = LOWORD(message->wParam);
     if (command == WB_TRAY_CMD_TOGGLE_PAUSE
             || command == WB_TRAY_CMD_OPEN_LOG_DIR
+            || command == WB_TRAY_CMD_TOGGLE_AUTOSTART
+            || command == WB_TRAY_CMD_SHOW_MENU
             || command == WB_TRAY_CMD_EXIT) {
         if (out_command != NULL) {
             *out_command = (enum wb_tray_command)command;

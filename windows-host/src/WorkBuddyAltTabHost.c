@@ -4,7 +4,9 @@
 #include "KeyboardBridgeCore.h"
 #include "HostApplication.h"
 #include "HostTrayIcon.h"
+#include "HostAutostart.h"
 
+#include <shellapi.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -12,6 +14,7 @@
 
 static wchar_t log_path[MAX_PATH];
 enum { STATUS_RETRY_TIMER = 0x5743 };
+enum { AUTOSTART_DISABLED_EXIT = 10, AUTOSTART_ERROR_EXIT = 11 };
 
 static void initialize_log_path(void) {
     wchar_t local_app_data[MAX_PATH];
@@ -44,12 +47,110 @@ static int self_test(void) {
     return 0;
 }
 
+static bool has_argument(const wchar_t *argument) {
+    int count = 0;
+    LPWSTR *arguments = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (arguments == NULL) return false;
+    bool found = false;
+    for (int index = 1; index < count; ++index) {
+        if (wcscmp(arguments[index], argument) == 0) {
+            found = true;
+            break;
+        }
+    }
+    LocalFree(arguments);
+    return found;
+}
+
+static HRESULT executable_path(wchar_t *path, DWORD capacity) {
+    DWORD length = GetModuleFileNameW(NULL, path, capacity);
+    if (length == 0) return HRESULT_FROM_WIN32(GetLastError());
+    if (length >= capacity) return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    return S_OK;
+}
+
+static HRESULT query_autostart(const wchar_t *path, bool *enabled) {
+    HRESULT result = wb_host_autostart_query(WB_AUTOSTART_TASK_NAME, path, enabled);
+    if (FAILED(result)) {
+        write_log(L"AUTOSTART_QUERY_FAILED hresult=0x%08lx", (unsigned long)result);
+    }
+    return result;
+}
+
+static void refresh_autostart(struct wb_host_tray *tray, const wchar_t *path) {
+    bool enabled = false;
+    HRESULT result = query_autostart(path, &enabled);
+    wb_host_tray_set_autostart(tray, SUCCEEDED(result) && enabled, SUCCEEDED(result));
+}
+
+static void toggle_autostart(struct wb_host_tray *tray, const wchar_t *path) {
+    bool enabled = false;
+    HRESULT result = query_autostart(path, &enabled);
+    if (SUCCEEDED(result)) {
+        result = wb_host_autostart_set(WB_AUTOSTART_TASK_NAME, path, !enabled);
+        write_log(L"AUTOSTART_SET enabled=%d hresult=0x%08lx",
+                !enabled, (unsigned long)result);
+    }
+    refresh_autostart(tray, path);
+    if (SUCCEEDED(result) && tray->autostart_available
+            && tray->autostart_enabled == enabled) {
+        result = E_FAIL;
+        write_log(L"AUTOSTART_VERIFY_FAILED expected=%d actual=%d hresult=0x%08lx",
+                !enabled, tray->autostart_enabled, (unsigned long)result);
+    }
+    if (FAILED(result) || !tray->autostart_available
+            || tray->autostart_enabled == enabled) {
+        MessageBoxW(tray->window, L"无法修改开机自启动，请查看日志后重试。",
+                L"WorkBuddy Alt+Tab 桥接", MB_OK | MB_ICONERROR);
+    }
+}
+
+static int request_host_exit(void) {
+    HWND window = FindWindowExW(HWND_MESSAGE, NULL,
+            L"WorkBuddyAltTabHostTray", L"WorkBuddyAltTabHostTray");
+    if (window == NULL) return 0;
+    if (!PostMessageW(window, WM_COMMAND, WB_TRAY_CMD_EXIT, 0)) {
+        write_log(L"HOST_QUIT_FAILED error=%lu", GetLastError());
+        return 12;
+    }
+    write_log(L"HOST_QUIT_REQUESTED");
+    return 0;
+}
+
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
                     PWSTR command_line, int show_command) {
-    (void)previous_instance; (void)show_command;
-    if (wcsstr(command_line, L"--self-test") != NULL) return self_test();
+    (void)previous_instance; (void)show_command; (void)command_line;
+    if (has_argument(L"--self-test")) return self_test();
     initialize_log_path();
-    bool probe_only = wcsstr(command_line, L"--probe") != NULL;
+    if (has_argument(L"--quit")) return request_host_exit();
+    wchar_t path[32768];
+    HRESULT path_result = executable_path(path, ARRAYSIZE(path));
+    if (FAILED(path_result)) {
+        write_log(L"HOST_PATH_FAILED hresult=0x%08lx", (unsigned long)path_result);
+        return AUTOSTART_ERROR_EXIT;
+    }
+    bool enable_autostart = has_argument(L"--enable-autostart");
+    bool disable_autostart = has_argument(L"--disable-autostart");
+    bool autostart_status = has_argument(L"--autostart-status");
+    if (enable_autostart || disable_autostart || autostart_status) {
+        if ((enable_autostart && disable_autostart)
+                || (autostart_status && (enable_autostart || disable_autostart))) {
+            write_log(L"AUTOSTART_ARGUMENT_CONFLICT");
+            return AUTOSTART_ERROR_EXIT;
+        }
+        if (autostart_status) {
+            bool enabled = false;
+            HRESULT result = query_autostart(path, &enabled);
+            if (FAILED(result)) return AUTOSTART_ERROR_EXIT;
+            return enabled ? 0 : AUTOSTART_DISABLED_EXIT;
+        }
+        HRESULT result = wb_host_autostart_set(WB_AUTOSTART_TASK_NAME,
+                path, enable_autostart);
+        write_log(L"AUTOSTART_SET enabled=%d hresult=0x%08lx",
+                enable_autostart, (unsigned long)result);
+        return SUCCEEDED(result) ? 0 : AUTOSTART_ERROR_EXIT;
+    }
+    bool probe_only = has_argument(L"--probe");
     HANDLE mutex = CreateMutexW(NULL, TRUE, L"Local\\WorkBuddyAltTabHost");
     if (mutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
         if (mutex != NULL) CloseHandle(mutex);
@@ -105,6 +206,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
                 write_log(L"TRAY_OPEN_LOG");
                 continue;
             }
+            if (tray_command == WB_TRAY_CMD_SHOW_MENU) {
+                refresh_autostart(&tray, path);
+                wb_host_tray_show_menu(&tray);
+                continue;
+            }
+            if (tray_command == WB_TRAY_CMD_TOGGLE_AUTOSTART) {
+                toggle_autostart(&tray, path);
+                continue;
+            }
             if (tray_command == WB_TRAY_CMD_TOGGLE_PAUSE) {
                 bool paused = !wb_keyboard_core_is_paused(&application.keyboard);
                 if (wb_host_application_set_paused(&application, paused)) {
@@ -123,8 +233,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
             write_log(L"STATUS_RECOVERED port=%u", WB_STATUS_PORT);
             continue;
         }
-        if (wb_host_application_handle_message(&application, &message))
+        if (wb_host_application_handle_message(&application, &message)) {
             write_log(L"HOTKEY_TRIGGERED send=TAB_OK");
+        } else {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
     }
     if (status_retry_timer != 0) KillTimer(wb_host_tray_window(&tray), status_retry_timer);
     wb_host_application_stop(&application);
