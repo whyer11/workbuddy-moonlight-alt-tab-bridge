@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string] $InstallDirectory = (Join-Path $env:LOCALAPPDATA 'WorkBuddyAltTab'),
+    [string] $InstallDirectory = (Join-Path $env:USERPROFILE 'Applications\WorkBuddyAltTab'),
     # Explicitly disables login startup, including a previous installation's setting.
     [switch] $NoAutoStart,
     [switch] $NoStart
@@ -118,7 +118,7 @@ $targetDirectory = [IO.Path]::GetFullPath($InstallDirectory).TrimEnd('\')
 if ($targetDirectory -eq [IO.Path]::GetPathRoot($targetDirectory).TrimEnd('\')) { throw 'The install directory must not be a drive root.' }
 if ($targetDirectory -ieq [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')) { throw 'Extract the release ZIP to a separate directory before installing.' }
 $targetExe = Join-Path $targetDirectory 'WorkBuddyAltTabHost.exe'
-$hostLog = Join-Path $env:LOCALAPPDATA 'WorkBuddyAltTab\host.log'
+$hostLog = Join-Path $targetDirectory 'host.log'
 $fileNames = @('WorkBuddyAltTabHost.exe', 'VERSION.txt', 'install.ps1', 'install-status-firewall.ps1')
 foreach ($path in @($targetDirectory) + @($fileNames | ForEach-Object { Join-Path $targetDirectory $_ })) {
     if (Test-Path -LiteralPath $path) {

@@ -262,14 +262,20 @@ void wb_host_tray_stop(struct wb_host_tray *tray) {
 }
 
 void wb_host_tray_open_log_directory(void) {
-    wchar_t local_app_data[MAX_PATH];
-    DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH);
-    if (length == 0 || length >= MAX_PATH) {
+    wchar_t directory[MAX_PATH];
+    DWORD length = GetModuleFileNameW(NULL, directory, ARRAYSIZE(directory));
+    if (length == 0 || length >= ARRAYSIZE(directory)) {
+        MessageBoxW(NULL, L"无法确定日志目录：程序路径不可用或过长。",
+                L"WorkBuddy Alt+Tab 桥接", MB_OK | MB_ICONERROR);
         return;
     }
-    wchar_t directory[MAX_PATH];
-    _snwprintf(directory, MAX_PATH, L"%ls\\WorkBuddyAltTab", local_app_data);
-    directory[MAX_PATH - 1] = L'\0';
-    CreateDirectoryW(directory, NULL);
+    wchar_t *separator = wcsrchr(directory, L'\\');
+    if (separator == NULL) {
+        MessageBoxW(NULL, L"无法确定日志目录：程序路径无效。",
+                L"WorkBuddy Alt+Tab 桥接", MB_OK | MB_ICONERROR);
+        return;
+    }
+    if (separator == directory + 2 && directory[1] == L':') ++separator;
+    *separator = L'\0';
     ShellExecuteW(NULL, L"open", directory, NULL, NULL, SW_SHOWNORMAL);
 }

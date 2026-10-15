@@ -6,24 +6,30 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
+import local.workbuddy.alttab.generated.GeneratedBridgeSchema;
+
 public final class NativeCapabilityParserTest {
     @Test
     public void parsesStrictDescriptionAndReadyLines() {
         NativeBridgeStatus description = NativeCapabilityParser.parse(
-                "WB_NATIVE_V2 version=0.9.2 protocol=2 rules=alt_tab,windows_key,arrow_keys,three_finger_drag");
+                "WB_NATIVE_V2 version=" + GeneratedBridgeSchema.PRODUCT_VERSION
+                        + " protocol=2 rules=alt_tab,windows_key,arrow_keys,three_finger_drag");
         assertTrue(description.ready());
         assertEquals(4, description.ruleIds().size());
 
         NativeBridgeStatus ready = NativeCapabilityParser.parse(
-                "WB_NATIVE_READY_V2 version=0.9.2 protocol=2 rules=alt_tab,windows_key,arrow_keys,three_finger_drag physical=/dev/input/event18");
+                "WB_NATIVE_READY_V2 version=" + GeneratedBridgeSchema.PRODUCT_VERSION
+                        + " protocol=2 rules=alt_tab,windows_key,arrow_keys,three_finger_drag physical=/dev/input/event18");
         assertTrue(ready.ready());
         assertEquals("/dev/input/event18", ready.physicalPath());
     }
 
     @Test
     public void rejectsDuplicateUnknownAndMismatchedFields() {
-        assertFalse(NativeCapabilityParser.parse("WB_NATIVE_V2 version=0.9.2 protocol=2 rules=alt_tab rules=windows_key").ready());
-        assertFalse(NativeCapabilityParser.parse("WB_NATIVE_V2 version=0.9.2 protocol=2 rules=alt_tab extra=x").ready());
+        assertFalse(NativeCapabilityParser.parse("WB_NATIVE_V2 version=" + GeneratedBridgeSchema.PRODUCT_VERSION
+                + " protocol=2 rules=alt_tab rules=windows_key").ready());
+        assertFalse(NativeCapabilityParser.parse("WB_NATIVE_V2 version=" + GeneratedBridgeSchema.PRODUCT_VERSION
+                + " protocol=2 rules=alt_tab extra=x").ready());
         assertFalse(NativeCapabilityParser.parse("WB_NATIVE_V2 version=0.6.0 protocol=1 rules=alt_tab").ready());
         assertFalse(NativeCapabilityParser.parse("garbage").ready());
     }

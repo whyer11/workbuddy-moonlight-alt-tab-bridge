@@ -18,7 +18,7 @@
 - 产品版本：WorkBuddy Bridge 0.9.3；Pad 应用标识为 `local.workbuddy.alttab`，Windows Host 可单独升级，继续兼容协议 V2 的旧版 Pad 应用。
 - Shizuku：13.6.0，ADB 模式，已授予 WorkBuddy 永久权限
 - Pad 自启动：Shizuku 与 WorkBuddy Alt+Tab 均已允许
-- Windows 程序：WorkBuddy Host，安装在 `%LOCALAPPDATA%\WorkBuddyAltTab\WorkBuddyAltTabHost.exe`
+- Windows 程序：WorkBuddy Host，默认安装在 `%USERPROFILE%\Applications\WorkBuddyAltTab\WorkBuddyAltTabHost.exe`
 - Windows 登录启动：当前用户交互会话的计划任务 `WorkBuddyAltTabHost`，登录后延迟 15 秒，失败后每分钟重试，最多 3 次。
 - Windows 状态接口：UDP 57420，仅允许 Tailscale 网段 `100.64.0.0/10` 入站
 - HyperOS“切换应用 Alt Tab”：保持关闭
@@ -33,7 +33,7 @@ Shizuku 13.6.0 在 Android 13 及以上、已授予 `WRITE_SECURE_SETTINGS` 且�
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-安装器默认启用开机自启动，并立即启动桥接。旧程序和日志会保存在安装目录的 `backups` 子目录。右键系统托盘的 WorkBuddy 图标，可以勾选或取消“开机自启动”，也可以暂停桥接、打开日志或退出程序。自启实际在当前用户登录后执行，无需管理员权限。
+安装器默认启用开机自启动，并立即启动桥接。旧程序和日志会保存在安装目录的 `backups` 子目录，运行日志为同目录的 `host.log`。默认位置独立于桌面应用的 AppData/MSIX 隔离目录，保证 Windows 登录任务和手工运行访问同一个程序。旧版若安装在 AppData 下，先退出旧程序，再执行新安装器。右键系统托盘的 WorkBuddy 图标，可以勾选或取消“开机自启动”，也可以暂停桥接、打开日志或退出程序。自启实际在当前用户登录后执行，无需管理员权限。
 
 安装时传入 `-NoAutoStart` 可关闭自启；传入 `-NoStart` 则不立即运行。命令行 `--enable-autostart`、`--disable-autostart` 切换同一个计划任务；`--autostart-status` 以退出码 `0` 表示启用、`10` 表示关闭，其他值表示查询失败。安装器和托盘不会各创建一套自启；成功配置后会移除本产品的旧 Run 登录项。
 
@@ -65,4 +65,4 @@ Windows ZIP 包含托盘程序 `WorkBuddyAltTabHost.exe`、默认启用自启的
 
 ## 回滚
 
-Pad 原生程序的上一版本保存在 `/data/local/tmp/alttab_evdev_bridge.previous`；Windows 安装器将旧 EXE 和版本说明备份在 `%LOCALAPPDATA%\WorkBuddyAltTab\backups`。回滚 Windows 时先退出托盘程序，再从所需备份目录恢复 EXE 和版本说明。完整卸载前运行 `WorkBuddyAltTabHost.exe --disable-autostart`，然后退出程序并删除安装目录；如需同时清理状态接口，可删除名为 `WorkBuddy Bridge Status (Tailscale)` 的 Windows 防火墙规则。Pad 上可单独卸载 WorkBuddy 和 Shizuku。回滚不会改动 Moonlight、Sunshine、Tailscale 或串流显示配置。
+Pad 原生程序的上一版本保存在 `/data/local/tmp/alttab_evdev_bridge.previous`；Windows 安装器将旧 EXE 和版本说明备份在 `%USERPROFILE%\Applications\WorkBuddyAltTab\backups`。回滚 Windows 时先退出托盘程序，再从所需备份目录恢复 EXE 和版本说明。完整卸载前运行 `WorkBuddyAltTabHost.exe --disable-autostart`，然后退出程序并删除安装目录；如需同时清理状态接口，可删除名为 `WorkBuddy Bridge Status (Tailscale)` 的 Windows 防火墙规则。Pad 上可单独卸载 WorkBuddy 和 Shizuku。回滚不会改动 Moonlight、Sunshine、Tailscale 或串流显示配置。

@@ -112,7 +112,7 @@ function New-Fixture([string] $Name, [switch] $Fresh) {
     $package = Join-Path $root 'package'
     $target = Join-Path $root 'installed'
     $env:LOCALAPPDATA = Join-Path $root 'profile'
-    $logDirectory = Join-Path $env:LOCALAPPDATA 'WorkBuddyAltTab'
+    $logDirectory = $target
     foreach ($directory in @($package, $target, $logDirectory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
     Copy-Item -LiteralPath $installer -Destination (Join-Path $package 'install.ps1')
     [IO.File]::WriteAllText((Join-Path $package 'WorkBuddyAltTabHost.exe'), 'new-exe')

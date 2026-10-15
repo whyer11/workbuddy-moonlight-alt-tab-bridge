@@ -16,15 +16,25 @@ static wchar_t log_path[MAX_PATH];
 enum { STATUS_RETRY_TIMER = 0x5743 };
 enum { AUTOSTART_DISABLED_EXIT = 10, AUTOSTART_ERROR_EXIT = 11 };
 
-static void initialize_log_path(void) {
-    wchar_t local_app_data[MAX_PATH];
-    DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH);
-    if (length == 0 || length >= MAX_PATH) { wcscpy(log_path, L"WorkBuddyAltTabHost.log"); return; }
-    wchar_t directory[MAX_PATH];
-    _snwprintf(directory, MAX_PATH, L"%ls\\WorkBuddyAltTab", local_app_data);
-    directory[MAX_PATH - 1] = L'\0'; CreateDirectoryW(directory, NULL);
-    _snwprintf(log_path, MAX_PATH, L"%ls\\host.log", directory);
-    log_path[MAX_PATH - 1] = L'\0';
+static bool initialize_log_path(void) {
+    DWORD length = GetModuleFileNameW(NULL, log_path, ARRAYSIZE(log_path));
+    if (length == 0 || length >= ARRAYSIZE(log_path)) {
+        if (length >= ARRAYSIZE(log_path)) SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return false;
+    }
+    wchar_t *separator = wcsrchr(log_path, L'\\');
+    if (separator == NULL) {
+        SetLastError(ERROR_INVALID_NAME);
+        return false;
+    }
+    size_t directory_length = (size_t)(separator + 1 - log_path);
+    static const wchar_t filename[] = L"host.log";
+    if (directory_length + ARRAYSIZE(filename) > ARRAYSIZE(log_path)) {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return false;
+    }
+    wcscpy(separator + 1, filename);
+    return true;
 }
 
 static void write_log(const wchar_t *format, ...) {
@@ -121,7 +131,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous_instance,
                     PWSTR command_line, int show_command) {
     (void)previous_instance; (void)show_command; (void)command_line;
     if (has_argument(L"--self-test")) return self_test();
-    initialize_log_path();
+    if (!initialize_log_path()) {
+        OutputDebugStringW(L"WorkBuddy: 无法确定程序目录下的 host.log 路径。\n");
+        return AUTOSTART_ERROR_EXIT;
+    }
     if (has_argument(L"--quit")) return request_host_exit();
     wchar_t path[32768];
     HRESULT path_result = executable_path(path, ARRAYSIZE(path));
