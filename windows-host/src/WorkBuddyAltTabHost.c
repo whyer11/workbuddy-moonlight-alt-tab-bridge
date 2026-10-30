@@ -116,7 +116,8 @@ static void toggle_autostart(struct wb_host_tray *tray, const wchar_t *path) {
 }
 
 static int request_host_exit(void) {
-    HWND window = FindWindowExW(HWND_MESSAGE, NULL,
+    /* Search both the current top-level receiver and older message-only hosts. */
+    HWND window = FindWindowExW(NULL, NULL,
             L"WorkBuddyAltTabHostTray", L"WorkBuddyAltTabHostTray");
     if (window == NULL) return 0;
     if (!PostMessageW(window, WM_COMMAND, WB_TRAY_CMD_EXIT, 0)) {

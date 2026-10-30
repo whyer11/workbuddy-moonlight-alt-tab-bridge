@@ -2,6 +2,10 @@
 
 这是为当前小米平板、Moonlight 12.1 与 Windows Sunshine 主机制作的本地输入桥接工具。它解决 HyperOS 在 Moonlight 之前截获实体键盘 `Alt+Tab` 和 `Command/Left Meta` 的问题，修复方向键被错误识别为游戏手柄输入的问题，并提供类似 macOS 的三指拖动。
 
+从 KeySwap 1.1.0 起，需要同时交换 Alt/Ctrl 的 Windows 用户可使用 [KeySwap 的统一 Windows 主机](https://github.com/whyer11/KeySwap)。它将本仓库的 Windows 键盘桥接与互换放入同一个状态机，使用一个钩子、托盘和登录任务，避免 Alt 被先换成 Ctrl 后导致 Alt+F12 桥接失效。Pad APK、原生桥接、三指拖动和 Moonlight 适配继续由本仓库及原有 Moonlight 分支提供，无需重新安装。
+
+迁移时退出独立 `WorkBuddyAltTabHost.exe` 并停用它的登录任务，在 KeySwap 中开启“小米 Pad 键盘桥接”。原 UDP 57420 / 协议 V2 与 Tailscale 防火墙规则保持兼容。KeySwap 仓库提供带备份及失败回滚的迁移脚本；不要同时运行两套 Windows 键盘桥接。不需要互换时可关闭 KeySwap 的互换选项，仅保留桥接。本仓库的独立 Windows Host 作为历史实现保留，后续 Windows 功能开发集中在 KeySwap；Pad 端代码继续在本仓库维护。
+
 ## 工作方式
 
 1. Pad 上的 Shizuku 以 ADB shell 身份启动 `WorkBuddy Alt+Tab` 用户服务。

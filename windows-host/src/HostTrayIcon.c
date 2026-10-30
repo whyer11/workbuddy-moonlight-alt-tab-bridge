@@ -168,9 +168,11 @@ bool wb_host_tray_start(struct wb_host_tray *tray, HINSTANCE instance,
     }
 
     tray->taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
-    tray->window = CreateWindowExW(0, WB_TRAY_WINDOW_CLASS,
+    /* TaskbarCreated is broadcast only to top-level windows. Keep this
+     * receiver hidden instead of using a message-only window. */
+    tray->window = CreateWindowExW(WS_EX_TOOLWINDOW, WB_TRAY_WINDOW_CLASS,
             L"WorkBuddyAltTabHostTray", 0, 0, 0, 0, 0,
-            HWND_MESSAGE, NULL, instance, tray);
+            NULL, NULL, instance, tray);
     if (tray->window == NULL) {
         return false;
     }

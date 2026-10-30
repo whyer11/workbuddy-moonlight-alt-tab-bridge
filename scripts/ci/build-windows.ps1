@@ -140,6 +140,16 @@ if ($null -eq $windres) {
 if ($LASTEXITCODE -ne 0) {
     throw "windres failed with exit code $LASTEXITCODE"
 }
+$trayTest = Join-Path $testsDir 'HostTrayIntegrationTest.exe'
+Invoke-Compiler -Arguments (@(
+    'windows-host\tests\HostTrayIntegrationTest.c',
+    'windows-host\src\HostTrayIcon.c',
+    $resourceObject
+) + $commonFlags + @('-o', $trayTest, '-luser32', '-lshell32'))
+if (-not $SkipInteractiveTests) {
+    Invoke-TestExecutable -Path $trayTest
+}
+
 Invoke-Compiler -Arguments (@(
     'windows-host\src\WorkBuddyAltTabHost.c',
     'windows-host\src\HostApplication.c',
